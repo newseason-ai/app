@@ -14,12 +14,13 @@ function createPool(): Pool {
     throw new Error("No database URL set");
   }
 
+  const connectionString = url
+    .replace(/[?&]sslmode=[^&]*/g, "")
+    .replace(/[?&]pgbouncer=[^&]*/g, "");
+
   return new Pool({
-    connectionString: url,
-    ssl:
-      process.env.NODE_ENV === "production"
-        ? { rejectUnauthorized: false }
-        : false,
+    connectionString,
+    ssl: { rejectUnauthorized: false },
   });
 }
 
