@@ -15,19 +15,50 @@ function buildSystemPrompt(
   directedQuestions: unknown,
   companyName: string,
 ): string {
-  // TODO: Replace this with structured prompt engineering and phase-aware instructions.
-  const directedQuestionsText =
-    typeof directedQuestions === "string"
-      ? directedQuestions
-      : JSON.stringify(directedQuestions);
+  // TODO: Prompt engineering iteration point — tune based on partner feedback,
+  // transcript quality, and completion rates. Consider A/B testing personas.
+
+  let directedQuestionItems: string[] = [];
+  if (Array.isArray(directedQuestions)) {
+    directedQuestionItems = directedQuestions
+      .map((q) => (typeof q === "string" ? q.trim() : ""))
+      .filter(Boolean);
+  } else if (typeof directedQuestions === "string" && directedQuestions.trim()) {
+    directedQuestionItems = [directedQuestions.trim()];
+  }
+
+  const questionGuide = directedQuestionItems.length > 0
+    ? [
+        "Areas to explore (use as inspiration, not a script — if the conversation goes somewhere more interesting, follow it):",
+        ...directedQuestionItems.map((q) => `- ${q}`),
+      ].join("\n")
+    : "No directed questions provided. Stay exploratory and follow whatever thread feels most revealing.";
 
   return [
-    `You are a voice interviewer collecting product feedback for ${companyName}.`,
+    `You are a warm, curious product researcher conducting a short voice interview on behalf of ${companyName}. You sound like a thoughtful colleague who genuinely wants to understand someone's experience — not a call center agent running through a checklist.`,
     "",
-    `Opening prompt: ${openingPrompt}`,
-    `Directed questions: ${directedQuestionsText ?? "[]"}`,
+    "Your goal is to surface honest, specific insights about what's working and what isn't. You're comfortable with silence. You follow threads. You don't rush.",
     "",
-    "Keep the conversation concise, natural, and empathetic.",
+    "Interview structure:",
+    "- Opening: introduce yourself briefly in one sentence, then ask the opening question exactly as written below.",
+    "- Core: follow up naturally. If someone gives a short answer, probe one level deeper before moving on. Ask 'what made you say that?' or 'can you walk me through that?' rather than jumping to the next topic.",
+    "- Close: around 2 minutes in, acknowledge what's been shared warmly and ask if they have anything else to add, or if they're happy to wrap up.",
+    "",
+    questionGuide,
+    "",
+    "Voice and style:",
+    "- One question per turn, always. Never stack questions.",
+    "- Short sentences. Natural pauses. Conversational, not formal.",
+    "- Never interrupt.",
+    "- Don't parrot their words back verbatim — it sounds hollow.",
+    "- If they say 'I don't know', try 'what's your gut feeling?' or gently move on.",
+    "- You sound genuinely interested, because you are.",
+    "",
+    `Opening question — ask this verbatim to start: "${openingPrompt}"`,
+    "",
+    "Call ending:",
+    "- After the close, deliver a brief warm goodbye and naturally conclude. Something like 'This has been really helpful — thanks so much for your time.'",
+    "- The platform handles technical call termination when the conversation is complete.",
   ].join("\n");
 }
 
@@ -71,9 +102,9 @@ export async function POST(request: Request) {
       });
     }
 
-    const apiKey = process.env.VAPI_API_KEY;
+    const apiKey = process.env.VAPI_PUBLIC_KEY;
     if (!apiKey) {
-      throw new Error("VAPI_API_KEY is not set");
+      throw new Error("VAPI_PUBLIC_KEY is not set");
     }
 
     const systemPrompt = buildSystemPrompt(
@@ -82,16 +113,25 @@ export async function POST(request: Request) {
       linkToken.template.company.name,
     );
 
-    const vapiResponse = await fetch("https://api.vapi.ai/call", {
+    const vapiResponse = await fetch("https://api.vapi.ai/call/web", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        type: "webCall",
         assistant: {
+          firstMessage: `Hi! Thanks for taking a moment to share your feedback with ${linkToken.template.company.name}. I'd love to hear what you thought.`,
+          endCallPhrases: ["goodbye", "have a great day", "take care", "bye"],
           // TODO: Add voice configuration (Cartesia) to the Vapi call payload.
+          endCallMessage:
+            "Thanks so much for sharing — this is really helpful. Have a great day!",
+          transcriber: {
+            provider: "deepgram",
+            model: "nova-2",
+            language: "en",
+            // TODO: If Vapi adds a supported Deepgram filler-word filtering field, configure it here.
+          },
           model: {
             provider: "openai",
             model: "gpt-4o",
