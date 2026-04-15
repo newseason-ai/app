@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { headers } from "next/headers";
 
 import { Flow } from "./flow";
@@ -38,15 +39,41 @@ async function getBaseUrl(): Promise<string> {
   return "http://localhost:3000";
 }
 
+async function resolveSession(token: string): Promise<{
+  response: Response;
+  data: SessionResolutionResponse | null;
+}> {
+  const baseUrl = await getBaseUrl();
+  const response = await fetch(`${baseUrl}/api/sessions/${encodeURIComponent(token)}`, {
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    return { response, data: null };
+  }
+
+  const data = (await response.json()) as SessionResolutionResponse;
+  return { response, data };
+}
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { token } = await params;
+  const { data } = await resolveSession(token);
+
+  if (!data?.company?.name) {
+    return {
+      title: "Customer Interview",
+    };
+  }
+
+  return {
+    title: `${data.company.name} Customer Interview`,
+  };
+}
+
 export default async function LandingPage({ params }: PageProps) {
   const { token } = await params;
-  const baseUrl = await getBaseUrl();
-  const response = await fetch(
-    `${baseUrl}/api/sessions/${encodeURIComponent(token)}`,
-    {
-      cache: "no-store",
-    },
-  );
+  const { response, data } = await resolveSession(token);
 
   if (response.status === 404) {
     return (
@@ -74,6 +101,15 @@ export default async function LandingPage({ params }: PageProps) {
     );
   }
 
-  const data = (await response.json()) as SessionResolutionResponse;
+  if (!data) {
+    return (
+      <main className="flex min-h-full items-center justify-center bg-[#FAFAF8] p-6">
+        <p className="text-center font-medium text-zinc-800">
+          Something went wrong loading this page
+        </p>
+      </main>
+    );
+  }
+
   return <Flow company={data.company} template={data.template} token={token} />;
 }
