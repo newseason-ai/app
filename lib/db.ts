@@ -9,9 +9,9 @@ const globalForPrisma = globalThis as typeof globalThis & {
 };
 
 function createPool(): Pool {
-  const url = process.env.DATABASE_URL;
+  const url = process.env.POSTGRES_PRISMA_URL;
   if (!url) {
-    throw new Error("DATABASE_URL is not set");
+    throw new Error("POSTGRES_PRISMA_URL is not set");
   }
   return new Pool({ connectionString: url });
 }
