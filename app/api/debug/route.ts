@@ -3,6 +3,12 @@ import { db } from "@/lib/db";
 export const runtime = "nodejs";
 
 export async function GET() {
+  const url = process.env.POSTGRES_URL ?? "";
+  return Response.json({
+    host: url.match(/@([^:\/]+)/)?.[1] ?? "not found",
+    hasUrl: !!url,
+  });
+
   try {
     await db.$queryRaw`SELECT 1`;
     return Response.json({ ok: true });
