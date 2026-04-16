@@ -2,6 +2,7 @@
 
 import Vapi from "@vapi-ai/web";
 import { useEffect, useMemo, useRef, useState } from "react";
+import "../respondent.css";
 
 type CallScreenProps = {
   company: { name: string; slug: string; logoUrl: string | null };
@@ -217,40 +218,13 @@ export function CallScreen({ company, token, onEnd }: CallScreenProps) {
 
   if (error) {
     return (
-      <div
-        style={{
-          position: "fixed",
-          inset: 0,
-          background: "#FAFAF8",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "0 24px",
-          fontFamily: "system-ui, -apple-system, sans-serif",
-          color: "#18181b",
-          textAlign: "center",
-          boxSizing: "border-box",
-        }}
-      >
-        <div style={{ maxWidth: 320, width: "100%" }}>
-          <div
-            style={{
-              width: 58,
-              height: 58,
-              borderRadius: "50%",
-              border: "1px solid #D4D4D8",
-              color: "#A1A1AA",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              margin: "0 auto 14px",
-            }}
-          >
+      <div className="call-screen-error-root">
+        <div className="call-screen-error-card">
+          <div className="call-screen-error-icon-wrap">
             <svg
               aria-hidden="true"
               viewBox="0 0 24 24"
-              style={{ width: 26, height: 26 }}
+              className="call-screen-error-icon"
               fill="none"
               stroke="currentColor"
               strokeWidth="2"
@@ -263,25 +237,14 @@ export function CallScreen({ company, token, onEnd }: CallScreenProps) {
             </svg>
           </div>
 
-          <p style={{ margin: "0 0 16px", fontSize: 15, lineHeight: 1.5, color: "#52525B" }}>
+          <p className="call-screen-error-text">
             {error}
           </p>
 
           <button
             type="button"
             onClick={onEnd}
-            style={{
-              width: "100%",
-              borderRadius: 999,
-              background: "#18181B",
-              color: "#FFFFFF",
-              border: "none",
-              padding: "14px 20px",
-              fontSize: 16,
-              fontWeight: 600,
-              cursor: "pointer",
-              WebkitAppearance: "none",
-            }}
+            className="call-screen-error-btn"
           >
             Go back
           </button>
@@ -291,53 +254,10 @@ export function CallScreen({ company, token, onEnd }: CallScreenProps) {
   }
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "#FAFAF8",
-        display: "flex",
-        flexDirection: "column",
-        fontFamily: "system-ui, -apple-system, sans-serif",
-        color: "#18181b",
-        padding: "0 24px",
-        paddingTop: "max(20px, env(safe-area-inset-top))",
-        paddingBottom: "max(20px, env(safe-area-inset-bottom))",
-        boxSizing: "border-box",
-      }}
-    >
-      <style>
-        {`
-          @keyframes callPulse {
-            0% { transform: scale(1); opacity: 0.35; }
-            50% { transform: scale(1.08); opacity: 0.18; }
-            100% { transform: scale(1); opacity: 0.35; }
-          }
-          @keyframes callWave {
-            0%, 100% { transform: scaleY(0.45); opacity: 0.65; }
-            50% { transform: scaleY(1); opacity: 1; }
-          }
-        `}
-      </style>
-      <div
-        style={{
-          maxWidth: 390,
-          width: "100%",
-          margin: "0 auto",
-          display: "flex",
-          flexDirection: "column",
-          height: "100%",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: 12,
-          }}
-        >
-          <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: "#27272a" }}>
+    <div className="call-screen-root">
+      <div className="call-screen-container">
+        <div className="call-screen-top">
+          <p className="call-screen-title">
             {company.name} · feedback
           </p>
           <button
@@ -347,118 +267,52 @@ export function CallScreen({ company, token, onEnd }: CallScreenProps) {
               e.preventDefault();
               handleEnd();
             }}
-            style={{
-              borderRadius: 999,
-              border: "1px solid #FECACA",
-              background: "#FEF2F2",
-              color: "#DC2626",
-              fontSize: 13,
-              fontWeight: 600,
-              padding: "7px 14px",
-              cursor: "pointer",
-              WebkitAppearance: "none",
-            }}
+            className="call-screen-end-btn"
           >
             End
           </button>
         </div>
 
-        <div style={{ height: 1, background: "#E4E4E7", marginBottom: 14 }} />
+        <div className="call-screen-divider" />
 
-        <div
-          style={{
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 14,
-          }}
-        >
-          <div style={{ position: "relative", width: 132, height: 132 }}>
+        <div className="call-screen-main">
+          <div className="call-screen-orb">
             <div
+              className="call-screen-orb-ring-1"
               style={{
-                position: "absolute",
-                inset: 0,
-                borderRadius: "50%",
-                background: "#1D9E75",
-                opacity: 0.16,
                 animation: `callPulse ${
                   speakingState === "user" ? "1.1s" : speakingState === "agent" ? "2.4s" : "2s"
                 } ease-in-out infinite`,
               }}
             />
             <div
+              className="call-screen-orb-ring-2"
               style={{
-                position: "absolute",
-                inset: 16,
-                borderRadius: "50%",
-                background: "#1D9E75",
-                opacity: 0.2,
                 animation: `callPulse ${
                   speakingState === "user" ? "1.1s" : speakingState === "agent" ? "2.4s" : "2s"
                 } ease-in-out infinite`,
                 animationDelay: "0.2s",
               }}
             />
-            <div
-              style={{
-                position: "absolute",
-                inset: 36,
-                borderRadius: "50%",
-                background: "#1D9E75",
-              }}
-            />
+            <div className="call-screen-orb-core" />
           </div>
 
-          <p style={{ margin: 0, fontSize: 13, color: "#A1A1AA", lineHeight: 1.2 }}>
+          <p className="call-screen-time">
             {formatElapsed(elapsedSeconds)}
           </p>
 
           {agentText ? (
-            <div
-              style={{
-                width: "100%",
-                background: "#EEEEE6",
-                borderRadius: 16,
-                padding: "14px 16px",
-                boxSizing: "border-box",
-              }}
-            >
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: "#1D9E75",
-                  lineHeight: 1.3,
-                }}
-              >
+            <div className="call-screen-transcript">
+              <p className="call-screen-agent-label">
                 AI interviewer
               </p>
-              <p
-                style={{
-                  margin: "6px 0 10px",
-                  fontSize: 14,
-                  color: "#27272A",
-                  lineHeight: 1.45,
-                }}
-              >
+              <p className="call-screen-agent-text">
                 {agentText}
               </p>
 
               {userText ? (
-                <div
-                  style={{
-                    borderRadius: 12,
-                    border: "1px solid #E4E4E7",
-                    background: "#FFFFFF",
-                    padding: "10px 12px",
-                  }}
-                >
-                  <p
-                    style={{ margin: 0, fontSize: 14, color: "#52525B", lineHeight: 1.4 }}
-                  >
+                <div className="call-screen-user-bubble">
+                  <p className="call-screen-user-text">
                     {userText}
                   </p>
                 </div>
@@ -466,16 +320,13 @@ export function CallScreen({ company, token, onEnd }: CallScreenProps) {
             </div>
           ) : null}
 
-          <div style={{ display: "flex", alignItems: "end", gap: 4, height: 36 }}>
+          <div className="call-screen-waveform">
             {waveformHeights.map((height, idx) => (
               <span
                 key={`${height}-${idx}`}
+                className="call-screen-wave-bar"
                 style={{
-                  width: 5,
                   height,
-                  borderRadius: 999,
-                  background: "#1D9E75",
-                  transformOrigin: "bottom",
                   opacity: speakingState === "user" ? 1 : 0.35,
                   // TODO: Waveform animation can still be finicky across browsers; revisit if it stops animating.
                   animation:
@@ -487,7 +338,7 @@ export function CallScreen({ company, token, onEnd }: CallScreenProps) {
             ))}
           </div>
 
-          <p style={{ margin: 0, fontSize: 13, color: "#A1A1AA", lineHeight: 1.3 }}>
+          <p className="call-screen-listening">
             Listening · speak freely
           </p>
         </div>
