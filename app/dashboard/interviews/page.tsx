@@ -21,6 +21,9 @@ export default async function InterviewsPage() {
                   id: true,
                   status: true,
                   startedAt: true,
+                  _count: {
+                    select: { transcriptTurns: true }
+                  }
                 }
               }
             }
@@ -34,10 +37,13 @@ export default async function InterviewsPage() {
 
   const interviews = company.templates.map(t => {
     const sessions = t.linkTokens.flatMap(lt => lt.sessions)
-    const completed = sessions.filter(s => s.status === 'completed')
-    const lastSession = sessions.sort((a, b) =>
-      b.startedAt.getTime() - a.startedAt.getTime()
-    )[0] ?? null
+    const completed = sessions.filter(s =>
+      s.status === 'completed' &&
+      s._count?.transcriptTurns > 1
+    )
+    const lastSession = sessions
+      .filter(s => s._count?.transcriptTurns > 1)
+      .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())[0] ?? null
 
     return {
       id: t.id,

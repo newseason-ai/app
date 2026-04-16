@@ -160,6 +160,12 @@ export async function POST(request: Request) {
       await tx.transcriptTurn.deleteMany({ where: { sessionId: session.id } });
 
       if (turns.length > 0) {
+        // TODO: startedAtS is hardcoded to 0 because Vapi's end-of-call-report
+        // artifact does not include per-turn timestamps. If time-based analysis
+        // is needed later (e.g. measuring response latency, phase timing),
+        // consider switching to Vapi's real-time server messages during the call
+        // (speech-update / conversation-update events) which do include timestamps,
+        // and accumulating turns incrementally rather than from the final report.
         await tx.transcriptTurn.createMany({
           data: turns.map((t) => ({
             sessionId: session.id,
