@@ -42,20 +42,6 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  if (user && request.nextUrl.pathname.startsWith('/onboarding')) {
-    const { data: existingCompany } = await supabase
-      .from('companies')
-      .select('id')
-      .eq('user_id', user.id)
-      .maybeSingle()
-
-    if (existingCompany) {
-      const url = request.nextUrl.clone()
-      url.pathname = '/dashboard'
-      return NextResponse.redirect(url)
-    }
-  }
-
   // Redirect authed users away from /login
   if (user && request.nextUrl.pathname === '/login') {
     const url = request.nextUrl.clone()
