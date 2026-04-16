@@ -107,6 +107,10 @@ export async function POST(request: Request) {
       throw new Error("VAPI_PUBLIC_KEY is not set");
     }
 
+    // TODO: inject template.context and linkToken.respondentContext into system prompt
+    // template.context → general background about the company/product (applies to all sessions)
+    // linkToken.respondentContext → per-respondent context for this specific call
+    // See handoff doc section 10 for details
     const systemPrompt = buildSystemPrompt(
       linkToken.template.openingPrompt,
       linkToken.template.directedQuestions,

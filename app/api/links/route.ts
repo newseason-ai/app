@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 
 import { db } from "@/lib/db";
+import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
@@ -20,12 +21,20 @@ function getBaseUrl(): string {
 }
 
 export async function POST(request: Request) {
-  // TODO: Require operator authentication before this endpoint goes live.
-  // Currently open for internal Postman use during development only.
   try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = (await request.json()) as {
       template_id?: string;
       respondent_ref?: string;
+      respondentName?: string;
+      respondentContext?: string;
     };
 
     const templateId =
@@ -33,6 +42,15 @@ export async function POST(request: Request) {
     const respondentRef =
       typeof body?.respondent_ref === "string" && body.respondent_ref.trim()
         ? body.respondent_ref.trim()
+        : undefined;
+    const respondentName =
+      typeof body?.respondentName === "string" && body.respondentName.trim()
+        ? body.respondentName.trim()
+        : undefined;
+
+    const respondentContext =
+      typeof body?.respondentContext === "string" && body.respondentContext.trim()
+        ? body.respondentContext.trim()
         : undefined;
 
     if (!templateId) {
@@ -43,7 +61,11 @@ export async function POST(request: Request) {
     }
 
     const template = await db.template.findFirst({
-      where: { id: templateId, active: true },
+      where: {
+        id: templateId,
+        active: true,
+        company: { userId: user.id },
+      },
       select: { id: true },
     });
 
@@ -62,6 +84,9 @@ export async function POST(request: Request) {
         templateId: template.id,
         token,
         respondentRef,
+        respondentContext: respondentContext ?? null,
+        metadata: respondentName ? { name: respondentName } : {},
+        label: respondentName ?? null,
         expiresAt,
       },
     });
