@@ -4,13 +4,24 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { SendLinkModal } from '../../send-link-modal'
 
-type Session = {
+type LinkStatus = 'pending' | 'completed' | 'abandoned' | 'expired'
+
+type LinkRow = {
   id: string
-  status: string
-  durationS: number | null
-  startedAt: string
+  token: string
   respondentName: string | null
   respondentRef: string | null
+  respondentContext: string | null
+  createdAt: string
+  expiresAt: string
+  status: LinkStatus
+  session: {
+    id: string
+    status: string
+    durationS: number | null
+    startedAt: string
+    followUpOptIn: boolean
+  } | null
 }
 
 type Template = {
@@ -40,18 +51,33 @@ function timeAgo(iso: string) {
   return `${Math.floor(hrs / 24)}d ago`
 }
 
+const STATUS_FILTERS = ['all', 'completed', 'pending', 'abandoned', 'expired'] as const
+type Filter = typeof STATUS_FILTERS[number]
+
+const STATUS_COLORS: Record<LinkStatus, { bg: string; color: string }> = {
+  completed: { bg: '#0F3D2E', color: '#3DBFA0' },
+  pending: { bg: 'rgba(255,255,255,0.07)', color: '#888' },
+  abandoned: { bg: '#3D2A0A', color: '#EF9F27' },
+  expired: { bg: '#2A1A1A', color: '#666' },
+}
+
 export function InterviewDetail({
   template,
-  sessions,
+  links,
   companyName,
 }: {
   template: Template
-  sessions: Session[]
+  links: LinkRow[]
   companyName: string
 }) {
   const router = useRouter()
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState(false)
+  const [filter, setFilter] = useState<Filter>('all')
+  const [search, setSearch] = useState('')
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [generatingId, setGeneratingId] = useState<string | null>(null)
+
   const [name, setName] = useState(template.name)
   const [openingPrompt, setOpeningPrompt] = useState(template.openingPrompt)
   const [context, setContext] = useState(template.context ?? '')
@@ -61,10 +87,62 @@ export function InterviewDetail({
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
-  const completedSessions = sessions.filter(s => s.status === 'completed')
-  const avgDuration = completedSessions.length > 0
-    ? Math.round(completedSessions.reduce((sum, s) => sum + (s.durationS ?? 0), 0) / completedSessions.length)
+  const filteredLinks = links
+    .filter(l => filter === 'all' || l.status === filter)
+    .filter(l => {
+      if (!search.trim()) return true
+      const term = search.toLowerCase()
+      return (
+        l.respondentName?.toLowerCase().includes(term) ||
+        l.respondentRef?.toLowerCase().includes(term)
+      )
+    })
+
+  const completedLinks = links.filter(l => l.status === 'completed')
+  const avgDuration = completedLinks.length > 0
+    ? Math.round(completedLinks.reduce((sum, l) => sum + (l.session?.durationS ?? 0), 0) / completedLinks.length)
     : null
+
+  async function handleCopyLink(link: LinkRow) {
+    const url = `${window.location.origin}/r/${link.token}`
+    try {
+      await navigator.clipboard.writeText(url)
+    } catch {
+      const el = document.createElement('textarea')
+      el.value = url
+      el.style.position = 'fixed'
+      el.style.opacity = '0'
+      document.body.appendChild(el)
+      el.select()
+      document.execCommand('copy')
+      document.body.removeChild(el)
+    }
+    setCopiedId(link.id)
+    setTimeout(() => setCopiedId(null), 2000)
+  }
+
+  async function handleNewLink(link: LinkRow) {
+    setGeneratingId(link.id)
+    try {
+      const res = await fetch('/api/links', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          template_id: template.id,
+          respondentName: link.respondentName,
+          respondentContext: link.respondentContext,
+        })
+      })
+      if (!res.ok) throw new Error('Failed to generate link')
+      const data = await res.json()
+      await navigator.clipboard.writeText(data.url).catch(() => {})
+      router.refresh()
+    } catch {
+      // silent fail — refresh still happens
+    } finally {
+      setGeneratingId(null)
+    }
+  }
 
   async function handleSave() {
     setSaving(true)
@@ -85,6 +163,7 @@ export function InterviewDetail({
         throw new Error(data.error ?? 'Failed to save')
       }
       setEditing(false)
+      router.refresh()
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Something went wrong')
     } finally {
@@ -94,132 +173,15 @@ export function InterviewDetail({
 
   return (
     <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        :root {
-          --bg: #111113; --surface: #1E1E20; --surface2: #1A1A1C;
-          --ink: #ffffff; --ink-muted: #666; --ink-faint: #444;
-          --border: rgba(255,255,255,0.07); --teal: #3DBFA0;
-          --font: 'Inter', system-ui, sans-serif;
-        }
-        html, body { min-height: 100vh; background: var(--bg); }
-        .layout { font-family: var(--font); background: var(--bg); min-height: 100vh; display: grid; grid-template-columns: 220px 1fr; }
-        .sidebar { background: #0D0D0F; border-right: 1px solid var(--border); padding: 20px 0; display: flex; flex-direction: column; }
-        .sb-logo { font-size: 14px; font-weight: 600; color: var(--ink); padding: 0 20px 20px; border-bottom: 1px solid var(--border); margin-bottom: 8px; letter-spacing: -0.01em; }
-        .sb-logo span { color: var(--ink-faint); font-weight: 400; }
-        .sb-item { display: flex; align-items: center; gap: 8px; padding: 8px 20px; color: var(--ink-muted); font-size: 13px; text-decoration: none; transition: color 0.15s; }
-        .sb-item:hover { color: var(--ink); }
-        .sb-item.active { color: var(--ink); font-weight: 500; }
-        .sb-item svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
-        .sb-bottom { margin-top: auto; padding: 16px 20px; border-top: 1px solid var(--border); }
-        .sb-email { font-size: 12px; color: var(--ink-muted); margin-bottom: 6px; }
-        .sb-signout { font-size: 12px; color: var(--ink-faint); cursor: pointer; background: none; border: none; font-family: var(--font); padding: 0; }
-
-        .main { padding: 40px 48px; max-width: 1100px; overflow: auto; }
-        .back { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-faint); cursor: pointer; background: none; border: none; font-family: var(--font); padding: 0; margin-bottom: 28px; transition: color 0.15s; }
-        .back:hover { color: var(--ink-muted); }
-
-        .page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px; }
-        .page-title { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; color: var(--ink); margin-bottom: 4px; }
-        .page-sub { font-size: 13px; color: var(--ink-faint); }
-        .header-actions { display: flex; gap: 8px; }
-        .btn { font-family: var(--font); font-size: 13px; font-weight: 500; padding: 9px 18px; border-radius: 100px; cursor: pointer; border: none; transition: opacity 0.15s; }
-        .btn-primary { background: var(--ink); color: #111; }
-        .btn-primary:hover { opacity: 0.85; }
-        .btn-secondary { background: rgba(255,255,255,0.07); color: var(--ink-muted); }
-        .btn-secondary:hover { background: rgba(255,255,255,0.12); }
-        .btn-ghost { background: none; border: 1px solid var(--border); color: var(--ink-faint); }
-        .btn-ghost:hover { color: var(--ink-muted); border-color: rgba(255,255,255,0.15); }
-
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 32px; }
-        .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
-        .panel-header { padding: 16px 20px; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center; }
-        .panel-title { font-size: 13px; font-weight: 600; color: var(--ink); }
-        .panel-action { font-size: 12px; color: var(--ink-faint); cursor: pointer; background: none; border: none; font-family: var(--font); transition: color 0.15s; }
-        .panel-action:hover { color: var(--ink-muted); }
-        .panel-body { padding: 20px; }
-
-        .field { margin-bottom: 16px; }
-        .field:last-child { margin-bottom: 0; }
-        .field-label { font-size: 11px; font-weight: 500; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
-        .field-value { font-size: 14px; color: var(--ink-muted); line-height: 1.6; }
-        .field-input { font-family: var(--font); font-size: 14px; padding: 10px 14px; background: #111113; border: 1px solid var(--border); border-radius: 10px; color: var(--ink); outline: none; width: 100%; transition: border-color 0.15s; }
-        .field-input:focus { border-color: rgba(255,255,255,0.2); }
-        .field-textarea { font-family: var(--font); font-size: 14px; padding: 10px 14px; background: #111113; border: 1px solid var(--border); border-radius: 10px; color: var(--ink); outline: none; width: 100%; resize: none; line-height: 1.55; transition: border-color 0.15s; }
-        .field-textarea:focus { border-color: rgba(255,255,255,0.2); }
-
-        .questions-wrap { background: #111113; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
-        .q-row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,0.04); }
-        .q-row:last-child { border-bottom: none; }
-        .q-num { font-size: 11px; color: var(--ink-faint); min-width: 16px; }
-        .q-input { font-family: var(--font); font-size: 13px; background: none; border: none; color: var(--ink); outline: none; flex: 1; }
-        .q-input::placeholder { color: #333; }
-        .q-add { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #444; background: none; border: none; cursor: pointer; font-family: var(--font); padding: 10px 14px; width: 100%; text-align: left; border-top: 1px solid rgba(255,255,255,0.04); transition: color 0.15s; }
-        .q-add:hover { color: var(--ink-muted); }
-
-        .save-row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
-        .save-error { font-size: 12px; color: #E24B4A; margin-top: 8px; text-align: right; }
-
-        .stat-row { display: flex; gap: 24px; padding: 16px 20px; border-bottom: 1px solid rgba(255,255,255,0.05); }
-        .stat { }
-        .stat-label { font-size: 11px; color: var(--ink-faint); margin-bottom: 4px; }
-        .stat-value { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; color: var(--ink); }
-
-        .sessions-table { width: 100%; }
-        .sess-row { display: grid; grid-template-columns: 1fr 100px 90px 60px; align-items: center; padding: 11px 20px; border-bottom: 1px solid rgba(255,255,255,0.04); cursor: pointer; transition: background 0.1s; gap: 12px; }
-        .sess-row:last-child { border-bottom: none; }
-        .sess-row:hover { background: rgba(255,255,255,0.02); }
-        .sess-row.header { cursor: default; background: none; }
-        .sess-row.header:hover { background: none; }
-        .sess-col-label { font-size: 11px; font-weight: 500; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.06em; }
-        .sess-name { font-size: 13px; font-weight: 500; color: var(--ink); }
-        .sess-time { font-size: 11px; color: var(--ink-faint); margin-top: 1px; }
-        .sess-badge { font-size: 11px; font-weight: 500; padding: 3px 8px; border-radius: 100px; display: inline-block; }
-        .sess-badge.completed { background: #0F3D2E; color: var(--teal); }
-        .sess-badge.abandoned { background: #3D2A0A; color: #EF9F27; }
-        .sess-badge.error { background: #3D0F0F; color: #E24B4A; }
-        .sess-dur { font-size: 12px; color: var(--ink-muted); }
-        .sess-arrow { font-size: 16px; color: var(--ink-faint); text-align: right; }
-
-        .empty-sessions { padding: 40px 20px; text-align: center; color: var(--ink-faint); font-size: 13px; line-height: 1.6; }
-      `}</style>
-
       <div className="layout">
-        <aside className="sidebar">
-          <div className="sb-logo">New Season <span>AI</span></div>
-          <a href="/dashboard" className="sb-item">
-            <svg viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>
-            Overview
-          </a>
-          <a href="/dashboard/interviews" className="sb-item active">
-            <svg viewBox="0 0 16 16"><path d="M2 4h12M2 8h12M2 12h7"/></svg>
-            Interviews
-          </a>
-          <a href="/dashboard/sessions" className="sb-item">
-            <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg>
-            Sessions
-          </a>
-          <a href="/dashboard/insights" className="sb-item">
-            <svg viewBox="0 0 16 16"><path d="M8 2l1.5 4.5H14l-3.5 2.5 1.5 4.5L8 11l-4 2.5 1.5-4.5L2 6.5h4.5z"/></svg>
-            Insights
-          </a>
-          <div className="sb-bottom">
-            <div className="sb-email">{companyName}</div>
-            <form action="/auth/signout" method="post">
-              <button className="sb-signout" type="submit">Sign out</button>
-            </form>
-          </div>
-        </aside>
-
         <main className="main">
-          <button className="back" onClick={() => router.push('/dashboard')}>
-            ← Back to overview
+          <button className="back" onClick={() => router.push('/dashboard/interviews')}>
+            ← Back to interviews
           </button>
 
           <div className="page-header">
             <div>
-              <div className="page-title">{editing ? 'Editing interview' : template.name}</div>
+              <div className="page-title">{editing ? 'Editing interview' : name}</div>
               <div className="page-sub">Created {timeAgo(template.createdAt)}</div>
             </div>
             <div className="header-actions">
@@ -232,13 +194,13 @@ export function InterviewDetail({
             </div>
           </div>
 
-          <div className="grid">
+          <div className="layout-grid">
             {/* Left — interview config */}
             <div className="panel">
               <div className="panel-header">
                 <span className="panel-title">Interview setup</span>
                 {editing && (
-                  <button className="panel-action" onClick={() => setEditing(false)}>Cancel</button>
+                  <button className="panel-action" onClick={() => { setEditing(false); setSaveError(null) }}>Cancel</button>
                 )}
               </div>
               <div className="panel-body">
@@ -253,11 +215,17 @@ export function InterviewDetail({
                       <textarea className="field-textarea" rows={3} value={openingPrompt} onChange={e => setOpeningPrompt(e.target.value)} />
                     </div>
                     <div className="field">
-                      <div className="field-label">Product context <span style={{ color: '#333', fontSize: 10, fontWeight: 400, textTransform: 'none', letterSpacing: 0, marginLeft: 4 }}>optional</span></div>
+                      <div className="field-label">
+                        Product context
+                        <span style={{ color: '#333', fontSize: 10, fontWeight: 400, textTransform: 'none', letterSpacing: 0, marginLeft: 4 }}>optional</span>
+                      </div>
                       <textarea className="field-textarea" rows={2} placeholder="Background about your product..." value={context} onChange={e => setContext(e.target.value)} />
                     </div>
                     <div className="field">
-                      <div className="field-label">Directed questions <span style={{ color: '#333', fontSize: 10, fontWeight: 400, textTransform: 'none', letterSpacing: 0, marginLeft: 4 }}>optional</span></div>
+                      <div className="field-label">
+                        Directed questions
+                        <span style={{ color: '#333', fontSize: 10, fontWeight: 400, textTransform: 'none', letterSpacing: 0, marginLeft: 4 }}>optional</span>
+                      </div>
                       <div className="questions-wrap">
                         {questions.map((q, i) => (
                           <div className="q-row" key={i}>
@@ -313,53 +281,126 @@ export function InterviewDetail({
               </div>
             </div>
 
-            {/* Right — sessions */}
+            {/* Right — links table */}
             <div className="panel">
               <div className="stat-row">
-                <div className="stat">
-                  <div className="stat-label">Responses</div>
-                  <div className="stat-value">{sessions.length}</div>
+                <div>
+                  <div className="stat-label">Links sent</div>
+                  <div className="stat-value">{links.length}</div>
                 </div>
-                <div className="stat">
+                <div>
                   <div className="stat-label">Completed</div>
-                  <div className="stat-value">{completedSessions.length}</div>
+                  <div className="stat-value">{completedLinks.length}</div>
                 </div>
-                <div className="stat">
+                <div>
+                  <div className="stat-label">Pending</div>
+                  <div className="stat-value">{links.filter(l => l.status === 'pending').length}</div>
+                </div>
+                <div>
                   <div className="stat-label">Avg duration</div>
                   <div className="stat-value">{formatDuration(avgDuration)}</div>
                 </div>
               </div>
-              {sessions.length > 0 ? (
-                <div className="sessions-table">
-                  <div className="sess-row header">
-                    <div className="sess-col-label">Respondent</div>
-                    <div className="sess-col-label">Status</div>
-                    <div className="sess-col-label">Duration</div>
+
+              <div className="filter-bar">
+                {STATUS_FILTERS.map(f => (
+                  <button
+                    key={f}
+                    className={`filter-pill ${filter === f ? 'active' : ''}`}
+                    onClick={() => setFilter(f)}
+                  >
+                    {f.charAt(0).toUpperCase() + f.slice(1)}
+                    {f !== 'all' && (
+                      <span style={{ marginLeft: 4, opacity: 0.5 }}>
+                        {links.filter(l => l.status === f).length}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              <div className="search-bar">
+                <input
+                  className="search-input"
+                  type="text"
+                  placeholder="Search by name..."
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                />
+              </div>
+
+              {filteredLinks.length > 0 ? (
+                <div className="links-table">
+                  <div className="link-row header">
+                    <div className="link-col-label">Respondent</div>
+                    <div className="link-col-label">Status</div>
+                    <div className="link-col-label">Duration</div>
                     <div></div>
                   </div>
-                  {sessions.map(s => (
-                    <div
-                      className="sess-row"
-                      key={s.id}
-                      onClick={() => window.location.href = `/dashboard/sessions/${s.id}`}
-                    >
-                      <div>
-                        <div className="sess-name">
-                          {s.respondentName ?? s.respondentRef ?? 'Anonymous'}
+                  <div className="links-scroll">
+                    {filteredLinks.map(link => {
+                      const colors = STATUS_COLORS[link.status]
+                      return (
+                        <div className="link-row" key={link.id}>
+                          <div>
+                            <div className="link-name">
+                              {link.respondentName ?? link.respondentRef ?? 'Anonymous'}
+                            </div>
+                            <div className="link-time">{timeAgo(link.createdAt)}</div>
+                          </div>
+                          <div>
+                            <span
+                              className="link-badge"
+                              style={{ background: colors.bg, color: colors.color }}
+                            >
+                              {link.status}
+                            </span>
+                          </div>
+                          <div className="link-dur">
+                            {formatDuration(link.session?.durationS ?? null)}
+                          </div>
+                          <div className="link-actions">
+                            {link.status === 'completed' && link.session && (
+                              <button
+                                className="link-action-btn view"
+                                onClick={() => router.push(
+                                  `/dashboard/sessions/${link.session!.id}?from=${encodeURIComponent(name)}`
+                                )}
+                              >
+                                View transcript
+                              </button>
+                            )}
+                            {(link.status === 'pending' || link.status === 'abandoned') && (
+                              <button
+                                className={`link-action-btn ${copiedId === link.id ? 'copied' : 'copy'}`}
+                                onClick={() => handleCopyLink(link)}
+                              >
+                                {copiedId === link.id ? '✓ Copied' : 'Copy link'}
+                              </button>
+                            )}
+                            {link.status === 'expired' && (
+                              <button
+                                className="link-action-btn newlink"
+                                onClick={() => handleNewLink(link)}
+                                disabled={generatingId === link.id}
+                              >
+                                {generatingId === link.id ? 'Generating...' : 'New link'}
+                              </button>
+                            )}
+                          </div>
                         </div>
-                        <div className="sess-time">{timeAgo(s.startedAt)}</div>
-                      </div>
-                      <div>
-                        <span className={`sess-badge ${s.status}`}>{s.status}</span>
-                      </div>
-                      <div className="sess-dur">{formatDuration(s.durationS)}</div>
-                      <div className="sess-arrow">›</div>
-                    </div>
-                  ))}
+                      )
+                    })}
+                  </div>
                 </div>
               ) : (
-                <div className="empty-sessions">
-                  No responses yet — send a link to start collecting feedback.
+                <div className="empty-links">
+                  {search.trim()
+                    ? `No results for "${search}"`
+                    : filter === 'all'
+                      ? 'No links sent yet — click "Send link" to generate your first.'
+                      : `No ${filter} links.`
+                  }
                 </div>
               )}
             </div>
@@ -370,8 +411,8 @@ export function InterviewDetail({
       {showModal && (
         <SendLinkModal
           templateId={template.id}
-          templateName={template.name}
-          onClose={() => setShowModal(false)}
+          templateName={name}
+          onClose={() => { setShowModal(false); router.refresh() }}
         />
       )}
     </>

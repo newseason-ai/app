@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import QRCode from 'qrcode'
 
 type Props = {
   templateId: string
@@ -13,6 +14,7 @@ export function SendLinkModal({ templateId, templateName, onClose }: Props) {
   const [respondentContext, setRespondentContext] = useState('')
   const [loading, setLoading] = useState(false)
   const [url, setUrl] = useState<string | null>(null)
+  const [qrUrl, setQrUrl] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -39,6 +41,17 @@ export function SendLinkModal({ templateId, templateName, onClose }: Props) {
 
       const data = await res.json()
       setUrl(data.url)
+
+      const qr = await QRCode.toDataURL(data.url, {
+        width: 200,
+        margin: 2,
+        color: {
+          dark: '#111113',
+          light: '#ffffff',
+        }
+      })
+      setQrUrl(qr)
+
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
     } finally {
@@ -81,6 +94,8 @@ export function SendLinkModal({ templateId, templateName, onClose }: Props) {
           padding: 32px;
           width: 100%;
           max-width: 440px;
+          max-height: 90vh;
+          overflow-y: auto;
           font-family: 'Inter', system-ui, sans-serif;
         }
         .modal-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
@@ -176,6 +191,30 @@ export function SendLinkModal({ templateId, templateName, onClose }: Props) {
               <div className="link-meta">
                 {respondentName && `For ${respondentName} · `}Expires in 30 days
               </div>
+
+              {qrUrl && (
+                <div
+                  style={{
+                    marginTop: 20,
+                    paddingTop: 20,
+                    borderTop: '1px solid rgba(255,255,255,0.06)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 8,
+                  }}
+                >
+                  <img
+                    src={qrUrl}
+                    alt="QR code"
+                    style={{ width: 160, height: 160, borderRadius: 8 }}
+                  />
+                  <span style={{ fontSize: 11, color: '#444' }}>
+                    Scan to test on mobile
+                  </span>
+                </div>
+              )}
+
               <button className="modal-done-btn" onClick={onClose}>Done</button>
             </div>
           )}

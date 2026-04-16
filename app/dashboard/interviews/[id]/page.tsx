@@ -18,11 +18,14 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
         orderBy: { createdAt: 'desc' },
         include: {
           sessions: {
+            orderBy: { startedAt: 'desc' },
             select: {
               id: true,
               status: true,
               durationS: true,
               startedAt: true,
+              endedAt: true,
+              followUpOptIn: true,
             }
           }
         }
@@ -32,13 +35,36 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
 
   if (!template || template.company.userId !== user.id) notFound()
 
-  const sessions = template.linkTokens.flatMap(lt =>
-    lt.sessions.map(s => ({
-      ...s,
+  const links = template.linkTokens.map(lt => {
+    const session = lt.sessions.find(s => s.status === 'completed')
+      ?? lt.sessions[0]
+      ?? null
+    const now = new Date()
+
+    let status: 'pending' | 'completed' | 'abandoned' | 'expired'
+    if (session?.status === 'completed') status = 'completed'
+    else if (session?.status === 'abandoned') status = 'abandoned'
+    else if (lt.expiresAt < now) status = 'expired'
+    else status = 'pending'
+
+    return {
+      id: lt.id,
+      token: lt.token,
       respondentName: (lt.metadata as { name?: string })?.name ?? null,
       respondentRef: lt.respondentRef,
-    }))
-  ).sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())
+      respondentContext: lt.respondentContext,
+      createdAt: lt.createdAt.toISOString(),
+      expiresAt: lt.expiresAt.toISOString(),
+      status,
+      session: session ? {
+        id: session.id,
+        status: session.status,
+        durationS: session.durationS,
+        startedAt: session.startedAt.toISOString(),
+        followUpOptIn: session.followUpOptIn,
+      } : null,
+    }
+  })
 
   return (
     <InterviewDetail
@@ -52,14 +78,7 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
         active: template.active,
         createdAt: template.createdAt.toISOString(),
       }}
-      sessions={sessions.map(s => ({
-        id: s.id,
-        status: s.status,
-        durationS: s.durationS,
-        startedAt: s.startedAt.toISOString(),
-        respondentName: s.respondentName,
-        respondentRef: s.respondentRef,
-      }))}
+      links={links}
       companyName={template.company.name}
     />
   )

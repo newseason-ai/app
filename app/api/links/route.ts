@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 
 function generateToken(): string {
   // Node best practice for secure random token generation.
-  return randomBytes(16).toString("hex");
+  return randomBytes(8).toString("hex");
 }
 
 function getBaseUrl(): string {
