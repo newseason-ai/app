@@ -20,6 +20,7 @@ function formatElapsed(seconds: number): string {
 
 export function CallScreen({ company, token, onEnd }: CallScreenProps) {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [connecting, setConnecting] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [speakingState, setSpeakingState] = useState<SpeakingState>("idle");
   const [agentText, setAgentText] = useState("");
@@ -83,6 +84,7 @@ export function CallScreen({ company, token, onEnd }: CallScreenProps) {
         });
 
         if (!mounted) return;
+        setConnecting(false);
 
         const vapi = new Vapi(publicKey);
         vapiRef.current = vapi;
@@ -185,6 +187,7 @@ export function CallScreen({ company, token, onEnd }: CallScreenProps) {
         // TODO: distinguish between error types — Vapi downtime vs network vs token expired.
         // Consider retry logic for transient failures before showing the error screen.
         if (mounted) {
+          setConnecting(false);
           setError("Something went wrong starting the call. Please try again.");
         }
       }
@@ -215,6 +218,36 @@ export function CallScreen({ company, token, onEnd }: CallScreenProps) {
   };
 
   const waveformHeights = useMemo(() => [12, 18, 25, 34, 25, 18, 12], []);
+
+  if (connecting && !error) {
+    return (
+      <div className="call-screen-root">
+        <div className="call-screen-container">
+          <div className="call-screen-top">
+            <p className="call-screen-title">{company.name} · feedback</p>
+          </div>
+          <div className="call-screen-divider" />
+          <div className="call-screen-main">
+            <div className="call-screen-orb">
+              <div
+                className="call-screen-orb-ring-1"
+                style={{ animation: "callPulse 2s ease-in-out infinite" }}
+              />
+              <div
+                className="call-screen-orb-ring-2"
+                style={{ animation: "callPulse 2s ease-in-out infinite", animationDelay: "0.2s" }}
+              />
+              <div className="call-screen-orb-core" />
+            </div>
+            <p className="call-screen-time">0:00</p>
+            <p className="call-screen-listening" style={{ opacity: 0.5 }}>
+              Connecting...
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (error) {
     return (

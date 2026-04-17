@@ -28,6 +28,7 @@ function CheckIcon() {
 
 export function PostScreen({ company, onOptIn, onClose }: PostScreenProps) {
   const [opted, setOpted] = useState(false)
+  const [declined, setDeclined] = useState(false)
 
   function handleOptIn() {
     setOpted(true)
@@ -53,39 +54,27 @@ export function PostScreen({ company, onOptIn, onClose }: PostScreenProps) {
 
           <div className="post-screen-divider" />
 
-          {!opted ? (
+          {!opted && !declined ? (
             <>
-              <p className="post-screen-eyebrow">
-                Stay in the loop
-              </p>
-
+              <p className="post-screen-eyebrow">Stay in the loop</p>
               <div className="post-screen-optin-card">
-                <h2 className="post-screen-optin-title">
-                  Want to be kept in the loop?
-                </h2>
+                <h2 className="post-screen-optin-title">Want to be kept in the loop?</h2>
                 <p className="post-screen-optin-text">
-                  {company.name} will occasionally reach out when your input would be
-                  especially useful.
+                  {company.name} will occasionally reach out when your input would be especially useful.
                 </p>
-
-                <button
-                  type="button"
-                  onClick={handleOptIn}
-                  className="post-screen-optin-btn"
-                >
+                <button type="button" onClick={handleOptIn} className="post-screen-optin-btn">
                   Yes, keep me in the loop
                 </button>
               </div>
-
               <button
                 type="button"
-                onClick={onClose}
+                onClick={() => setDeclined(true)}
                 className="post-screen-close-btn"
               >
                 No thanks · close
               </button>
             </>
-          ) : (
+          ) : opted ? (
             <div className="post-screen-success">
               <svg
                 viewBox="0 0 24 24"
@@ -98,13 +87,15 @@ export function PostScreen({ company, onOptIn, onClose }: PostScreenProps) {
               >
                 <path d="m5 12 4 4 10-10" />
               </svg>
-              <p className="post-screen-success-title">
-                You&apos;re in the loop
-              </p>
+              <p className="post-screen-success-title">You&apos;re in the loop</p>
               <p className="post-screen-success-text">
                 {company.name} will reach out when your input would be helpful.
               </p>
             </div>
+          ) : (
+            <p className="post-screen-close-btn" style={{ textAlign: 'center', cursor: 'default' }}>
+              Got it — we will pass your feedback along.
+            </p>
           )}
         </div>
       </div>
