@@ -748,7 +748,7 @@ export default function LandingPage() {
           </div>
           <div className="how-steps">
             {[
-              { n: "01", title: "Create your interview", body: "Write an opening prompt and a few directed questions. Add context about your product and who you're speaking to." },
+              { n: "01", title: "Create your interview", body: "Set interview context and background, add a few directed questions, and describe who you're speaking to." },
               { n: "02", title: "Send a link", body: "Generate a unique link per respondent. No app, no account, no friction on their end." },
               { n: "03", title: "AI conducts the call", body: "A natural voice conversation, ~90 seconds. Respondents talk in their own words, on their own time." },
               { n: "04", title: "Read the insights", body: "Transcripts, auto-tagged themes, and synthesized insights land in your dashboard automatically." },

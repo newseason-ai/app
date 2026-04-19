@@ -16,9 +16,10 @@ type SessionResolutionResponse = {
     logoUrl: string | null;
   };
   template: {
-    openingPrompt: string;
+    context: string | null;
+    background: string | null;
     directedQuestions: unknown;
-    targetDurationS: number;
+    targetDurationS: number | null;
   };
 };
 

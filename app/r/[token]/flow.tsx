@@ -9,9 +9,10 @@ import { PostScreen } from "./post-screen";
 
 type CompanyData = { name: string; slug: string; logoUrl: string | null };
 type TemplateData = {
-  openingPrompt: string;
+  context: string | null;
+  background: string | null;
   directedQuestions: unknown;
-  targetDurationS: number;
+  targetDurationS: number | null;
 };
 
 type FlowProps = {

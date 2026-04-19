@@ -5,7 +5,12 @@ import "../respondent.css";
 
 type LandingScreenProps = {
   company: { name: string; slug: string; logoUrl: string | null };
-  template: { openingPrompt: string; directedQuestions: unknown; targetDurationS: number };
+  template: {
+    context: string | null;
+    background: string | null;
+    directedQuestions: unknown;
+    targetDurationS: number | null;
+  };
   onNext: () => void;
 };
 
@@ -34,7 +39,7 @@ function MetaChip({ icon, label }: { icon: ReactNode; label: string }) {
 }
 
 export function LandingScreen({ company, template, onNext }: LandingScreenProps) {
-  const minutes = Math.max(1, Math.round(template.targetDurationS / 60));
+  const minutes = Math.max(1, Math.round((template.targetDurationS ?? 120) / 60));
 
   return (
     <div className="landing-screen-root">

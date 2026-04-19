@@ -24,7 +24,8 @@ export async function GET(_request: Request, context: RouteContext) {
         expiresAt: true,
         template: {
           select: {
-            openingPrompt: true,
+            context: true,
+            background: true,
             directedQuestions: true,
             targetDurationS: true,
             company: {
@@ -54,7 +55,8 @@ export async function GET(_request: Request, context: RouteContext) {
         logoUrl: linkToken.template.company.logoUrl,
       },
       template: {
-        openingPrompt: linkToken.template.openingPrompt,
+        context: linkToken.template.context,
+        background: linkToken.template.background,
         directedQuestions: linkToken.template.directedQuestions,
         targetDurationS: linkToken.template.targetDurationS,
       },
