@@ -28,22 +28,24 @@ function buildSystemPrompt(
         typeof q.text === 'string' && q.text.trim()
     )
   }
-
-  const questionGuide = questionItems.length > 0
-    ? questionItems.map((q, i) =>
-        q.mode === 'verbatim'
-          ? `${i + 1}. [VERBATIM] "${q.text}"`
-          : `${i + 1}. [GUIDED] ${q.text}`
-      ).join('\n')
+  const questionGuide =
+  questionItems.length > 0
+    ? questionItems
+        .map((q, i) =>
+          q.mode === 'verbatim'
+            ? `${i + 1}. [VERBATIM] "${q.text}"`
+            : `${i + 1}. [GUIDED] ${q.text}`
+        )
+        .join('\n')
     : 'No directed questions provided. Stay exploratory and follow whatever thread feels most revealing.'
 
-  return `You are conducting a short voice interview on behalf of ${companyName}. You are a researcher. Never say "we" when referring to yourself or the client. The client is "the ${companyName} team" — real people who will read what gets shared. Your job is to create space for someone to say something honest, and to make that feel easy.
+return `You are conducting a short voice interview on behalf of ${companyName}. You are a researcher. Never say "we" when referring to yourself or the client. The client is "the ${companyName} team" — real people who will read what gets shared. Your job is to create space for someone to say something honest, and to make that feel easy.
 
 ---
 
 CONTEXT
 
-You have four pieces of context. Use each one correctly.
+You have three pieces of context. Use each one correctly.
 
 INTERVIEW CONTEXT (surfaced): ${context ?? 'Not provided.'}
 Use this to frame the opener naturally. The user will hear this reflected in how you introduce the conversation.
@@ -54,7 +56,7 @@ Use this to calibrate your tone, depth, pacing, and sensitivity throughout. Neve
 If not provided, use your judgment.
 
 RESPONDENT CONTEXT: ${respondentContext ?? 'Not provided.'}
-Use this to personalize the opener and calibrate your behavior for this specific user. Reference details that would make them feel specifically chosen. Do not reference anything that would feel surveillance-like or unexpected.
+Use this to personalize the opener and inform how you conduct the interview for this specific user. Surface details that make them feel chosen. Do not reference anything that would feel surveillance-like or unexpected to them.
 If not provided, omit individual personalization.
 
 ---
@@ -176,6 +178,7 @@ ${questionGuide}
 ---
 
 Your only job is to leave every user feeling like the conversation was exactly the right length — and that someone was actually listening. Read when they're done. Exit before they feel trapped. Close with something real.`
+
 }
 
 export async function POST(request: Request) {
@@ -240,6 +243,11 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         assistant: {
+          // Opening: omit `firstMessage` and use model-generated first turn so the assistant
+          // follows `model.messages` (system prompt OPENING) instead of a hardcoded string.
+          // See Vapi Assistant.firstMessage / firstMessageMode in the public API types.
+          firstMessageMode:
+            "assistant-speaks-first-with-model-generated-message",
           endCallPhrases: ["goodbye", "have a great day", "take care", "bye"],
           // TODO: Add voice configuration (Cartesia) to the Vapi call payload.
           endCallMessage:
@@ -248,7 +256,22 @@ export async function POST(request: Request) {
             provider: "deepgram",
             model: "nova-2",
             language: "en",
+            // Silence (ms) before Deepgram finalizes an utterance. Default 10; higher = more
+            // tolerant of mid-thought pauses before the pipeline treats the user as "done".
+            endpointing: 400,
             // TODO: If Vapi adds a supported Deepgram filler-word filtering field, configure it here.
+          },
+          // When the user is considered "done" and how long to wait before the assistant
+          // speaks — primary levers for not jumping in during natural pauses (English).
+          startSpeakingPlan: {
+            waitSeconds: 0.65,
+            smartEndpointingPlan: {
+              provider: "livekit",
+              // Balanced curve from Vapi voice-pipeline docs; waits longer when the model is
+              // less sure the user has finished (x = still-speaking probability).
+              waitFunction:
+                "(20 + 500 * sqrt(x) + 2500 * x^3 + 700 + 4000 * max(0, x-0.5)) / 2",
+            },
           },
           model: {
             provider: "openai",
