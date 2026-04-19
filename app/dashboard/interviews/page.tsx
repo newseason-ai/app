@@ -21,11 +21,11 @@ export default async function InterviewsPage() {
                   id: true,
                   status: true,
                   startedAt: true,
-                  _count: {
-                    select: { transcriptTurns: true }
-                  }
-                }
-              }
+                  transcriptTurns: {
+                    select: { speaker: true },
+                  },
+                },
+              },
             }
           }
         }
@@ -37,25 +37,24 @@ export default async function InterviewsPage() {
 
   const interviews = company.templates.map(t => {
     const sessions = t.linkTokens.flatMap(lt => lt.sessions)
-    const completed = sessions.filter(s =>
-      s.status === 'completed' &&
-      s._count?.transcriptTurns > 1
+    const realSessions = sessions.filter(
+      s =>
+        s.status === 'completed' &&
+        s.transcriptTurns.some(t => t.speaker === 'user'),
     )
-    const lastSession = sessions
-      .filter(s => s._count?.transcriptTurns > 1)
-      .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())[0] ?? null
 
     return {
       id: t.id,
       name: t.name,
-      openingPrompt: t.openingPrompt,
       active: t.active,
       createdAt: t.createdAt.toISOString(),
       updatedAt: t.updatedAt.toISOString(),
       linkCount: t.linkTokens.length,
-      sessionCount: sessions.length,
-      completedCount: completed.length,
-      lastActivityAt: lastSession?.startedAt.toISOString() ?? null,
+      completedCount: realSessions.length,
+      lastActivityAt:
+        realSessions
+          .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())[0]
+          ?.startedAt.toISOString() ?? null,
     }
   })
 

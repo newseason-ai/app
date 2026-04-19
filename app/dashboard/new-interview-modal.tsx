@@ -2,6 +2,9 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { QuestionEditor } from './question-editor'
+
+type Question = { text: string; mode: 'verbatim' | 'guided' }
 
 type Props = {
   onClose: () => void
@@ -10,11 +13,13 @@ type Props = {
 export function NewInterviewModal({ onClose }: Props) {
   const router = useRouter()
   const [name, setName] = useState('')
-  const [openingPrompt, setOpeningPrompt] = useState('')
   const [context, setContext] = useState('')
-  const [questions, setQuestions] = useState<string[]>([''])
+  const [background, setBackground] = useState('')
+  const [questions, setQuestions] = useState<Question[]>([{ text: '', mode: 'guided' }])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const canSubmit = name.trim().length > 0 && questions.some(q => q.text.trim().length > 0)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -27,9 +32,9 @@ export function NewInterviewModal({ onClose }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name,
-          openingPrompt,
           context: context || null,
-          directedQuestions: questions.filter(q => q.trim()),
+          background: background || null,
+          directedQuestions: questions.filter(q => q.text.trim()),
         })
       })
 
@@ -61,15 +66,28 @@ export function NewInterviewModal({ onClose }: Props) {
           border-radius: 16px;
           padding: 32px;
           width: 100%;
-          max-width: 480px;
+          max-width: 640px;
           font-family: 'Inter', system-ui, sans-serif;
           max-height: 90vh;
           overflow-y: auto;
         }
-        .nim-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
-        .nim-eyebrow { font-size: 11px; font-weight: 500; color: #444; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
-        .nim-title { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; color: #fff; }
-        .nim-close { background: none; border: none; color: #444; cursor: pointer; font-size: 20px; line-height: 1; padding: 0; transition: color 0.15s; font-family: inherit; }
+        .nim-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 24px; }
+        .nim-eyebrow { font-size: 11px; font-weight: 500; color: #444; text-transform: uppercase; letter-spacing: 0.08em; }
+        .nim-title-input {
+          font-family: 'Inter', system-ui, sans-serif;
+          font-size: 20px;
+          font-weight: 600;
+          letter-spacing: -0.02em;
+          color: #fff;
+          background: none;
+          border: none;
+          outline: none;
+          width: 100%;
+          padding: 0;
+          margin-top: 4px;
+        }
+        .nim-title-input::placeholder { color: #2a2a2a; }
+        .nim-close { background: none; border: none; color: #444; cursor: pointer; font-size: 20px; line-height: 1; padding: 0; transition: color 0.15s; font-family: inherit; flex-shrink: 0; }
         .nim-close:hover { color: #888; }
         .nim-form { display: flex; flex-direction: column; gap: 18px; }
         .nim-field { display: flex; flex-direction: column; gap: 6px; }
@@ -82,114 +100,75 @@ export function NewInterviewModal({ onClose }: Props) {
         .nim-textarea:focus { border-color: rgba(255,255,255,0.2); }
         .nim-textarea::placeholder { color: #333; }
         .nim-hint { font-size: 11px; color: #333; line-height: 1.5; }
-        .nim-questions { background: #111113; border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; overflow: hidden; }
-        .nim-q-row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,0.04); }
-        .nim-q-row:last-child { border-bottom: none; }
-        .nim-q-num { font-size: 11px; color: #444; min-width: 16px; }
-        .nim-q-input { font-family: 'Inter', system-ui, sans-serif; font-size: 13px; background: none; border: none; color: #fff; outline: none; flex: 1; }
-        .nim-q-input::placeholder { color: #333; }
-        .nim-q-add { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #444; background: none; border: none; cursor: pointer; font-family: inherit; padding: 10px 14px; width: 100%; text-align: left; border-top: 1px solid rgba(255,255,255,0.04); transition: color 0.15s; }
-        .nim-q-add:hover { color: #888; }
         .nim-error { font-size: 13px; color: #E24B4A; }
         .nim-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 4px; }
         .nim-cancel { font-family: inherit; font-size: 13px; color: #444; background: none; border: none; cursor: pointer; transition: color 0.15s; }
         .nim-cancel:hover { color: #888; }
         .nim-submit { font-family: inherit; font-size: 14px; font-weight: 500; padding: 12px 28px; background: #fff; color: #111; border: none; border-radius: 100px; cursor: pointer; transition: opacity 0.15s; }
         .nim-submit:hover:not(:disabled) { opacity: 0.85; }
-        .nim-submit:disabled { opacity: 0.4; cursor: not-allowed; }
+        .nim-submit:disabled { opacity: 0.3; cursor: not-allowed; }
       `}</style>
 
       <div className="nim-backdrop" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
         <div className="nim">
           <div className="nim-header">
-            <div>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div className="nim-eyebrow">New interview</div>
-              <div className="nim-title">Set up your interview</div>
-            </div>
-            <button className="nim-close" onClick={onClose}>×</button>
-          </div>
-
-          <form className="nim-form" onSubmit={handleSubmit}>
-            <div className="nim-field">
-              <label className="nim-label">Interview name</label>
               <input
-                className="nim-input"
+                className="nim-title-input"
                 type="text"
-                placeholder="Early customer feedback"
+                placeholder="Interview name"
                 value={name}
                 onChange={e => setName(e.target.value)}
                 required
                 autoFocus
               />
             </div>
+            <button className="nim-close" onClick={onClose}>×</button>
+          </div>
 
-            <div className="nim-field">
-              <label className="nim-label">Opening prompt</label>
-              <textarea
-                className="nim-textarea"
-                rows={3}
-                placeholder="Hi! Thanks for being an early customer. I'd love to hear how things have been going since you signed up."
-                value={openingPrompt}
-                onChange={e => setOpeningPrompt(e.target.value)}
-                required
-              />
-              <span className="nim-hint">Keep it warm and open-ended. The AI will take it from here.</span>
-            </div>
-
+          <form className="nim-form" onSubmit={handleSubmit}>
             <div className="nim-field">
               <label className="nim-label">
-                Product context
+                Context
                 <span className="nim-optional">optional</span>
               </label>
               <textarea
                 className="nim-textarea"
                 rows={2}
-                placeholder="Background about your product and who you're speaking to..."
+                placeholder="The Acme team is improving the invoicing setup experience for new users."
                 value={context}
                 onChange={e => setContext(e.target.value)}
               />
+              <span className="nim-hint">Framed to the respondent. Sets the stage for the interview.</span>
             </div>
 
             <div className="nim-field">
               <label className="nim-label">
-                Directed questions
+                Background
                 <span className="nim-optional">optional</span>
               </label>
-              <div className="nim-questions">
-                {questions.map((q, i) => (
-                  <div className="nim-q-row" key={i}>
-                    <span className="nim-q-num">{i + 1}</span>
-                    <input
-                      className="nim-q-input"
-                      type="text"
-                      placeholder="Add a question..."
-                      value={q}
-                      onChange={e => {
-                        const updated = [...questions]
-                        updated[i] = e.target.value
-                        setQuestions(updated)
-                      }}
-                    />
-                  </div>
-                ))}
-                {questions.length < 5 && (
-                  <button
-                    type="button"
-                    className="nim-q-add"
-                    onClick={() => setQuestions([...questions, ''])}
-                  >
-                    + Add question
-                  </button>
-                )}
-              </div>
-              <span className="nim-hint">The AI will weave these in naturally. Max 5.</span>
+              <textarea
+                className="nim-textarea"
+                rows={2}
+                placeholder="Respondents are first-time users who signed up in the last 30 days. Probe on setup friction."
+                value={background}
+                onChange={e => setBackground(e.target.value)}
+              />
+              <span className="nim-hint">Silent behavioral guidance for the AI. Respondents never hear this.</span>
+            </div>
+
+            <div className="nim-field">
+              <label className="nim-label">Directed questions</label>
+              <QuestionEditor questions={questions} onChange={setQuestions} />
+              <span className="nim-hint" style={{ marginTop: 6, display: 'block' }}>Without verbatim, our interviewer will honor the intent of each question but adapt the phrasing for natural conversation.              </span>
             </div>
 
             {error && <p className="nim-error">{error}</p>}
 
             <div className="nim-footer">
               <button type="button" className="nim-cancel" onClick={onClose}>Cancel</button>
-              <button className="nim-submit" type="submit" disabled={loading}>
+              <button className="nim-submit" type="submit" disabled={loading || !canSubmit}>
                 {loading ? 'Creating...' : 'Create interview'}
               </button>
             </div>

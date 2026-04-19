@@ -1,6 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
+import { formatDuration } from '@/lib/format'
 
 type Turn = {
   id: string
@@ -26,13 +27,6 @@ type Session = {
   endedAt: string | null
   followUpOptIn: boolean
   vapiCallId: string
-}
-
-function formatDuration(s: number | null) {
-  if (!s) return '—'
-  const m = Math.floor(s / 60)
-  const sec = s % 60
-  return `${m}m ${sec.toString().padStart(2, '0')}s`
 }
 
 function formatTime(s: number) {

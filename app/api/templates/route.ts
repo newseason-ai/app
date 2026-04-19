@@ -18,20 +18,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'No company found' }, { status: 404 })
   }
 
-  const { name, openingPrompt, directedQuestions, context } = await request.json()
+  const { name, context, background, directedQuestions } = await request.json()
 
-  if (!name?.trim() || !openingPrompt?.trim()) {
-    return NextResponse.json({ error: 'Name and opening prompt are required' }, { status: 400 })
+  if (!name?.trim()) {
+    return NextResponse.json({ error: 'Name is required' }, { status: 400 })
   }
 
   const template = await db.template.create({
     data: {
       companyId: company.id,
       name: name.trim(),
-      openingPrompt: openingPrompt.trim(),
-      directedQuestions: directedQuestions ?? [],
       context: context?.trim() ?? null,
-      targetDurationS: 90, // hardcoded for now
+      background: background?.trim() ?? null,
+      directedQuestions: directedQuestions ?? [],
+      targetDurationS: 120,
       active: true,
     }
   })

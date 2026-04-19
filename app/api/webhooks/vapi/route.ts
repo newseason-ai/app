@@ -121,16 +121,7 @@ export async function POST(request: Request) {
       (call && typeof call.endedReason === "string" && call.endedReason) ||
       "unknown";
 
-    const durationS = callDurationSeconds(call);
-
     const turns = extractTurnsFromArtifact(message.artifact);
-
-    console.info("[vapi webhook] call end", {
-      callId,
-      endedReason,
-      durationS,
-      turnCount: turns.length,
-    });
 
     const session = await db.session.findFirst({
       where: { vapiCallId: callId },
@@ -145,6 +136,18 @@ export async function POST(request: Request) {
     }
 
     const endedAt = new Date();
+
+    // Compute duration from session.startedAt if Vapi doesn't provide it
+    const durationS =
+      callDurationSeconds(call) ??
+      Math.round((endedAt.getTime() - session.startedAt.getTime()) / 1000);
+
+    console.info("[vapi webhook] call end", {
+      callId,
+      endedReason,
+      durationS,
+      turnCount: turns.length,
+    });
 
     await db.$transaction(async (tx) => {
       await tx.session.update({

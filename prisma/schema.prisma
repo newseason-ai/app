@@ -33,10 +33,10 @@ model Template {
   companyId         String      @map("company_id")
   company           Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
   name              String
-  openingPrompt     String      @map("opening_prompt")
-  directedQuestions Json        @default("[]") @map("directed_questions")
-  targetDurationS   Int         @map("target_duration_s")
   context           String?
+  background        String?
+  directedQuestions Json        @default("[]") @map("directed_questions")
+  targetDurationS   Int?        @default(120) @map("target_duration_s")
   active            Boolean     @default(true)
   createdAt         DateTime    @default(now()) @map("created_at")
   updatedAt         DateTime    @updatedAt @map("updated_at")

@@ -2,9 +2,18 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { formatDuration } from '@/lib/format'
 import { SendLinkModal } from '../../send-link-modal'
+import { QuestionEditor } from '../../question-editor'
 
-type LinkStatus = 'pending' | 'completed' | 'abandoned' | 'expired'
+type Question = { text: string; mode: 'verbatim' | 'guided' }
+
+type LinkStatus =
+  | 'pending'
+  | 'completed'
+  | 'no_response'
+  | 'abandoned'
+  | 'expired'
 
 type LinkRow = {
   id: string
@@ -27,19 +36,12 @@ type LinkRow = {
 type Template = {
   id: string
   name: string
-  openingPrompt: string
   context: string | null
-  directedQuestions: string[]
-  targetDurationS: number
+  background: string | null
+  directedQuestions: { text: string; mode: string }[]
+  targetDurationS: number | null
   active: boolean
   createdAt: string
-}
-
-function formatDuration(s: number | null) {
-  if (!s) return '—'
-  const m = Math.floor(s / 60)
-  const sec = s % 60
-  return `${m}m ${sec.toString().padStart(2, '0')}s`
 }
 
 function timeAgo(iso: string) {
@@ -51,12 +53,20 @@ function timeAgo(iso: string) {
   return `${Math.floor(hrs / 24)}d ago`
 }
 
-const STATUS_FILTERS = ['all', 'completed', 'pending', 'abandoned', 'expired'] as const
+const STATUS_FILTERS = [
+  'all',
+  'completed',
+  'no_response',
+  'pending',
+  'abandoned',
+  'expired',
+] as const
 type Filter = typeof STATUS_FILTERS[number]
 
 const STATUS_COLORS: Record<LinkStatus, { bg: string; color: string }> = {
   completed: { bg: '#0F3D2E', color: '#3DBFA0' },
   pending: { bg: 'rgba(255,255,255,0.07)', color: '#888' },
+  no_response: { bg: 'rgba(255,255,255,0.05)', color: '#555' },
   abandoned: { bg: '#3D2A0A', color: '#EF9F27' },
   expired: { bg: '#2A1A1A', color: '#666' },
 }
@@ -79,10 +89,12 @@ export function InterviewDetail({
   const [generatingId, setGeneratingId] = useState<string | null>(null)
 
   const [name, setName] = useState(template.name)
-  const [openingPrompt, setOpeningPrompt] = useState(template.openingPrompt)
   const [context, setContext] = useState(template.context ?? '')
-  const [questions, setQuestions] = useState<string[]>(
-    template.directedQuestions.length > 0 ? template.directedQuestions : ['']
+  const [background, setBackground] = useState(template.background ?? '')
+  const [questions, setQuestions] = useState<Question[]>(
+    Array.isArray(template.directedQuestions) && template.directedQuestions.length > 0
+      ? (template.directedQuestions as Question[])
+      : [{ text: '', mode: 'guided' }]
   )
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -153,9 +165,9 @@ export function InterviewDetail({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name,
-          openingPrompt,
           context: context || null,
-          directedQuestions: questions.filter(q => q.trim()),
+          background: background || null,
+          directedQuestions: questions.filter(q => q.text.trim()),
         })
       })
       if (!res.ok) {
@@ -180,9 +192,35 @@ export function InterviewDetail({
           </button>
 
           <div className="page-header">
-            <div>
-              <div className="page-title">{editing ? 'Editing interview' : name}</div>
-              <div className="page-sub">Created {timeAgo(template.createdAt)}</div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              {editing ? (
+                <input
+                  style={{
+                    fontFamily: 'var(--font, system-ui)',
+                    fontSize: 22,
+                    fontWeight: 600,
+                    letterSpacing: '-0.02em',
+                    color: '#fff',
+                    background: 'none',
+                    border: 'none',
+                    borderBottom: '1px solid rgba(255,255,255,0.1)',
+                    outline: 'none',
+                    padding: '0 0 4px 0',
+                    width: '100%',
+                    minWidth: 0,
+                    display: 'block',
+                    marginBottom: 4,
+                  }}
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="Interview name"
+                />
+              ) : (
+                <div className="page-title">{name}</div>
+              )}
+              <div className="page-sub">
+                {editing ? 'Editing · ' : ''}{timeAgo(template.createdAt)}
+              </div>
             </div>
             <div className="header-actions">
               {!editing && (
@@ -200,54 +238,47 @@ export function InterviewDetail({
               <div className="panel-header">
                 <span className="panel-title">Interview setup</span>
                 {editing && (
-                  <button className="panel-action" onClick={() => { setEditing(false); setSaveError(null) }}>Cancel</button>
+                  <button
+                    className="panel-action"
+                    onClick={() => {
+                      setEditing(false)
+                      setSaveError(null)
+                      setName(template.name)
+                      setContext(template.context ?? '')
+                      setBackground(template.background ?? '')
+                      setQuestions(
+                        Array.isArray(template.directedQuestions) && template.directedQuestions.length > 0
+                          ? (template.directedQuestions as Question[])
+                          : [{ text: '', mode: 'guided' }]
+                      )
+                    }}
+                  >
+                    Cancel
+                  </button>
                 )}
               </div>
               <div className="panel-body">
                 {editing ? (
                   <>
                     <div className="field">
-                      <div className="field-label">Interview name</div>
-                      <input className="field-input" value={name} onChange={e => setName(e.target.value)} />
-                    </div>
-                    <div className="field">
-                      <div className="field-label">Opening prompt</div>
-                      <textarea className="field-textarea" rows={3} value={openingPrompt} onChange={e => setOpeningPrompt(e.target.value)} />
+                      <div className="field-label">
+                        Context
+                        <span style={{ color: '#333', fontSize: 10, fontWeight: 400, textTransform: 'none', letterSpacing: 0, marginLeft: 4 }}>optional</span>
+                      </div>
+                      <textarea className="field-textarea" rows={2} placeholder="The Acme team is improving the invoicing setup experience for new users." value={context} onChange={e => setContext(e.target.value)} />
+                      <div style={{ fontSize: 11, color: '#444', marginTop: 4 }}>Framed to the respondent. Sets the stage for the interview.</div>
                     </div>
                     <div className="field">
                       <div className="field-label">
-                        Product context
+                        Background
                         <span style={{ color: '#333', fontSize: 10, fontWeight: 400, textTransform: 'none', letterSpacing: 0, marginLeft: 4 }}>optional</span>
                       </div>
-                      <textarea className="field-textarea" rows={2} placeholder="Background about your product..." value={context} onChange={e => setContext(e.target.value)} />
+                      <textarea className="field-textarea" rows={2} placeholder="Respondents are first-time users who signed up in the last 30 days. Probe on setup friction." value={background} onChange={e => setBackground(e.target.value)} />
+                      <div style={{ fontSize: 11, color: '#444', marginTop: 4 }}>Silent behavioral guidance for the AI. Respondents never hear this.</div>
                     </div>
                     <div className="field">
-                      <div className="field-label">
-                        Directed questions
-                        <span style={{ color: '#333', fontSize: 10, fontWeight: 400, textTransform: 'none', letterSpacing: 0, marginLeft: 4 }}>optional</span>
-                      </div>
-                      <div className="questions-wrap">
-                        {questions.map((q, i) => (
-                          <div className="q-row" key={i}>
-                            <span className="q-num">{i + 1}</span>
-                            <input
-                              className="q-input"
-                              placeholder="Add a question..."
-                              value={q}
-                              onChange={e => {
-                                const updated = [...questions]
-                                updated[i] = e.target.value
-                                setQuestions(updated)
-                              }}
-                            />
-                          </div>
-                        ))}
-                        {questions.length < 5 && (
-                          <button type="button" className="q-add" onClick={() => setQuestions([...questions, ''])}>
-                            + Add question
-                          </button>
-                        )}
-                      </div>
+                      <div className="field-label">Directed questions</div>
+                      <QuestionEditor questions={questions} onChange={setQuestions} />
                     </div>
                     {saveError && <div className="save-error">{saveError}</div>}
                     <div className="save-row">
@@ -258,21 +289,28 @@ export function InterviewDetail({
                   </>
                 ) : (
                   <>
-                    <div className="field">
-                      <div className="field-label">Opening prompt</div>
-                      <div className="field-value">&ldquo;{template.openingPrompt}&rdquo;</div>
-                    </div>
                     {template.context && (
                       <div className="field">
-                        <div className="field-label">Product context</div>
+                        <div className="field-label">Context</div>
                         <div className="field-value">{template.context}</div>
                       </div>
                     )}
-                    {template.directedQuestions.length > 0 && (
+                    {template.background && (
+                      <div className="field">
+                        <div className="field-label">Background</div>
+                        <div className="field-value">{template.background}</div>
+                      </div>
+                    )}
+                    {Array.isArray(template.directedQuestions) && template.directedQuestions.length > 0 && (
                       <div className="field">
                         <div className="field-label">Directed questions</div>
-                        {template.directedQuestions.map((q, i) => (
-                          <div key={i} className="field-value" style={{ marginBottom: 4 }}>{i + 1}. {q}</div>
+                        {(template.directedQuestions as Question[]).map((q, i) => (
+                          <div key={i} style={{ marginBottom: 8 }}>
+                            <div className="field-value">{i + 1}. {q.text}</div>
+                            {q.mode === 'verbatim' && (
+                              <div style={{ fontSize: 11, color: '#444', marginTop: 2 }}>Verbatim</div>
+                            )}
+                          </div>
                         ))}
                       </div>
                     )}
@@ -309,7 +347,9 @@ export function InterviewDetail({
                     className={`filter-pill ${filter === f ? 'active' : ''}`}
                     onClick={() => setFilter(f)}
                   >
-                    {f.charAt(0).toUpperCase() + f.slice(1)}
+                    {f === 'no_response'
+                      ? 'No response'
+                      : f.charAt(0).toUpperCase() + f.slice(1)}
                     {f !== 'all' && (
                       <span style={{ marginLeft: 4, opacity: 0.5 }}>
                         {links.filter(l => l.status === f).length}
@@ -353,7 +393,9 @@ export function InterviewDetail({
                               className="link-badge"
                               style={{ background: colors.bg, color: colors.color }}
                             >
-                              {link.status}
+                              {link.status === 'no_response'
+                                ? 'No response'
+                                : link.status}
                             </span>
                           </div>
                           <div className="link-dur">
@@ -378,7 +420,8 @@ export function InterviewDetail({
                                 {copiedId === link.id ? '✓ Copied' : 'Copy link'}
                               </button>
                             )}
-                            {link.status === 'expired' && (
+                            {(link.status === 'expired' ||
+                              link.status === 'no_response') && (
                               <button
                                 className="link-action-btn newlink"
                                 onClick={() => handleNewLink(link)}

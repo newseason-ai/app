@@ -23,7 +23,7 @@
 html, body { min-height: 100vh; background: var(--bg); }
 .layout { font-family: var(--font); background: var(--bg); min-height: 100vh; }
 
-.main { padding: 40px 48px; max-width: 1100px; overflow: auto; }
+.main { padding: 40px 48px; width: 100%; max-width: 1400px; box-sizing: border-box; overflow: auto; font-family: var(--font); }
 .main-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px; }
 .main-title { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; color: var(--ink); }
 .main-sub { font-size: 13px; color: var(--ink-faint); margin-top: 3px; }
@@ -131,7 +131,7 @@ html, body { min-height: 100vh; background: var(--bg); }
 .search-input::placeholder { color: #333; }
 
 .links-table { width: 100%; }
-.link-row { display: grid; grid-template-columns: 1fr 80px 80px 90px; align-items: center; padding: 11px 20px; border-bottom: 1px solid rgba(255,255,255,0.04); gap: 12px; }
+.link-row { display: grid; grid-template-columns: 1fr 120px 100px 120px; align-items: center; padding: 11px 20px; border-bottom: 1px solid rgba(255,255,255,0.04); gap: 12px; }
 .link-row:last-child { border-bottom: none; }
 .link-row.header { cursor: default; }
 .link-col-label { font-size: 11px; font-weight: 500; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.06em; }

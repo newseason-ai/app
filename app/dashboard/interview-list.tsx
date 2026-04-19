@@ -7,7 +7,6 @@ import { SendLinkModal } from './send-link-modal'
 type Template = {
   id: string
   name: string
-  openingPrompt: string
 }
 
 type TemplateStats = {
@@ -49,7 +48,6 @@ export function InterviewList({ templates, templateStats }: Props) {
               <div className="ic-top">
                 <div>
                   <div className="ic-name">{template.name}</div>
-                  <div className="ic-prompt">&ldquo;{template.openingPrompt}&rdquo;</div>
                 </div>
                 <div className="ic-actions">
                   <span className="ic-badge">Active</span>

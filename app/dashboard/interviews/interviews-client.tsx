@@ -7,12 +7,10 @@ import { NewInterviewModal } from '../new-interview-modal'
 type Interview = {
   id: string
   name: string
-  openingPrompt: string
   active: boolean
   createdAt: string
   updatedAt: string
   linkCount: number
-  sessionCount: number
   completedCount: number
   lastActivityAt: string | null
 }
@@ -41,21 +39,21 @@ export function InterviewsClient({ interviews }: { interviews: Interview[] }) {
           --border: rgba(255,255,255,0.07); --teal: #3DBFA0;
           --font: 'Inter', system-ui, sans-serif;
         }
-        .main { padding: 40px 48px; max-width: 1100px; font-family: var(--font); }
         .page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px; }
         .page-title { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; color: var(--ink); }
         .page-sub { font-size: 13px; color: var(--ink-faint); margin-top: 3px; }
         .new-btn { background: var(--ink); color: #111; border: none; border-radius: 100px; padding: 10px 20px; font-size: 13px; font-weight: 500; cursor: pointer; font-family: var(--font); display: inline-flex; align-items: center; gap: 6px; transition: opacity 0.15s; }
         .new-btn:hover { opacity: 0.85; }
 
-        .table { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
-        .table-header { display: grid; grid-template-columns: 1fr 100px 100px 100px 120px; gap: 12px; padding: 11px 20px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .table { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; min-width: 760px; }
+        .table-header { display: grid; grid-template-columns: 320px 100px 80px 120px 140px; gap: 12px; padding: 11px 20px; border-bottom: 1px solid rgba(255,255,255,0.05); }
         .col-label { font-size: 11px; font-weight: 500; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.06em; }
-        .table-row { display: grid; grid-template-columns: 1fr 100px 100px 100px 120px; gap: 12px; padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.04); cursor: pointer; transition: background 0.1s; align-items: center; }
+        .table-row { display: grid; grid-template-columns: 320px 100px 80px 120px 140px; gap: 12px; padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.04); cursor: pointer; transition: background 0.1s; align-items: center; }
         .table-row:last-child { border-bottom: none; }
         .table-row:hover { background: rgba(255,255,255,0.02); }
-        .row-name { font-size: 13px; font-weight: 500; color: var(--ink); margin-bottom: 3px; }
-        .row-prompt { font-size: 11px; color: var(--ink-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 360px; }
+        .table-header > div:first-child,
+        .table-row > div:first-child { min-width: 0; }
+        .row-name { font-size: 13px; font-weight: 500; color: var(--ink); margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .row-stat { font-size: 13px; color: var(--ink-muted); }
         .row-time { font-size: 12px; color: var(--ink-faint); }
         .status-badge { font-size: 11px; font-weight: 500; padding: 3px 10px; border-radius: 100px; display: inline-block; }
@@ -102,7 +100,6 @@ export function InterviewsClient({ interviews }: { interviews: Interview[] }) {
               >
                 <div>
                   <div className="row-name">{interview.name}</div>
-                  <div className="row-prompt">&ldquo;{interview.openingPrompt}&rdquo;</div>
                 </div>
                 <div>
                   <span className={`status-badge ${interview.active ? 'active' : 'inactive'}`}>
@@ -110,14 +107,7 @@ export function InterviewsClient({ interviews }: { interviews: Interview[] }) {
                   </span>
                 </div>
                 <div className="row-stat">{interview.linkCount}</div>
-                <div className="row-stat">
-                  {interview.completedCount}
-                  {interview.sessionCount > interview.completedCount && (
-                    <span style={{ color: 'var(--ink-faint)', fontSize: 11, marginLeft: 4 }}>
-                      / {interview.sessionCount}
-                    </span>
-                  )}
-                </div>
+                <div className="row-stat">{interview.completedCount}</div>
                 <div className="row-time">
                   {interview.lastActivityAt
                     ? timeAgo(interview.lastActivityAt)

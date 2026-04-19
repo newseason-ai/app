@@ -24,11 +24,11 @@ export default async function DashboardPage() {
                   status: true,
                   followUpOptIn: true,
                   startedAt: true,
-                  _count: {
-                    select: { transcriptTurns: true }
-                  }
-                }
-              }
+                  transcriptTurns: {
+                    select: { speaker: true },
+                  },
+                },
+              },
             }
           }
         }
@@ -45,10 +45,11 @@ export default async function DashboardPage() {
     t.linkTokens.flatMap(lt => lt.sessions)
   )
 
-  const responsesThisMonth = allSessions.filter(s =>
-    s.status === 'completed' &&
-    s.startedAt >= startOfMonth &&
-    s._count.transcriptTurns > 1
+  const responsesThisMonth = allSessions.filter(
+    s =>
+      s.status === 'completed' &&
+      s.startedAt >= startOfMonth &&
+      s.transcriptTurns.some(t => t.speaker === 'user'),
   ).length
 
   const linksSent = company.templates.reduce(
@@ -61,8 +62,10 @@ export default async function DashboardPage() {
     Object.fromEntries(
       company.templates.map(t => {
         const sessions = t.linkTokens.flatMap(lt => lt.sessions)
-        const completed = sessions.filter(s =>
-          s.status === 'completed' && s._count.transcriptTurns > 1
+        const completed = sessions.filter(
+          s =>
+            s.status === 'completed' &&
+            s.transcriptTurns.some(t => t.speaker === 'user'),
         )
         return [t.id, { total: sessions.length, completed: completed.length }]
       })

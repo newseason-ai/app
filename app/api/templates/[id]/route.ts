@@ -21,18 +21,18 @@ export async function PATCH(
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
-  const { name, openingPrompt, context, directedQuestions } = await request.json()
+  const { name, context, background, directedQuestions } = await request.json()
 
-  if (!name?.trim() || !openingPrompt?.trim()) {
-    return NextResponse.json({ error: 'Name and opening prompt are required' }, { status: 400 })
+  if (!name?.trim()) {
+    return NextResponse.json({ error: 'Name is required' }, { status: 400 })
   }
 
   const updated = await db.template.update({
     where: { id },
     data: {
       name: name.trim(),
-      openingPrompt: openingPrompt.trim(),
       context: context?.trim() ?? null,
+      background: background?.trim() ?? null,
       directedQuestions: directedQuestions ?? [],
     }
   })
