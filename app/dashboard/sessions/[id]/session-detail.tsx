@@ -2,37 +2,10 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { formatDuration } from '@/lib/format'
-
-type Turn = {
-  id: string
-  speaker: string
-  content: string
-  turnIndex: number
-  startedAtS: number
-}
-
-type Finding = {
-  id: string
-  questionText: string | null
-  title: string | null
-  synthesis: string
-  evidence: string
-  sentiment: string | null
-  turnIndex: number | null
-}
-
-type Session = {
-  id: string
-  status: string
-  durationS: number | null
-  startedAt: string
-  endedAt: string | null
-  followUpOptIn: boolean
-  vapiCallId: string
-  sentiment: string | null
-  completionQuality: string | null
-}
+import type { SessionData, SessionTranscriptTurn } from '@/lib/queries/session'
+import { invalidateSession, useSession } from '@/lib/queries/session-client'
 
 function formatTime(s: number) {
   const m = Math.floor(s / 60)
@@ -47,7 +20,7 @@ function formatDate(iso: string) {
   })
 }
 
-async function copyTranscript(transcript: Turn[]) {
+async function copyTranscript(transcript: SessionTranscriptTurn[]) {
   const text = transcript
     .map(t => `${t.speaker.toUpperCase()} [${formatTime(t.startedAtS)}]\n${t.content}`)
     .join('\n\n')
@@ -66,59 +39,58 @@ async function copyTranscript(transcript: Turn[]) {
 }
 
 export function SessionDetail({
-  session,
-  transcript,
-  findings,
-  respondentName,
-  respondentRef,
-  respondentContext,
-  interviewName,
-  interviewId,
+  id,
+  initialData,
   fromLabel,
 }: {
-  session: Session
-  transcript: Turn[]
-  findings: Finding[]
-  respondentName: string | null
-  respondentRef: string | null
-  respondentContext: string | null
-  interviewName: string
-  interviewId: string
+  id: string
+  initialData: SessionData
   fromLabel: string
 }) {
   const router = useRouter()
-  const [generating, setGenerating] = useState(false)
-  const [generateError, setGenerateError] = useState<string | null>(null)
-  const [expandedFinding, setExpandedFinding] = useState<string | null>(null)
-  const displayName = respondentName ?? respondentRef ?? 'Anonymous'
-  const visibleTurns = transcript.filter(t => t.speaker.toLowerCase() !== 'system')
+  const queryClient = useQueryClient()
+  const { data: sessionPayload = initialData } = useSession(id, initialData)
+  const {
+    session,
+    transcript,
+    findings,
+    respondentName,
+    respondentRef,
+    respondentContext,
+    interviewName,
+    interviewId,
+  } = sessionPayload
 
-  async function handleGenerateFindings() {
-    setGenerating(true)
-    setGenerateError(null)
-    try {
-      const res = await fetch(`/api/sessions/${session.id}/findings`, {
+  const generateFindings = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/sessions/${id}/findings`, {
         method: 'POST',
       })
       if (!res.ok) throw new Error('Failed to generate findings')
-      router.refresh()
-    } catch (err) {
-      setGenerateError(err instanceof Error ? err.message : 'Something went wrong')
-    } finally {
-      setGenerating(false)
-    }
-  }
+    },
+    onSettled: () => {
+      invalidateSession(queryClient, id)
+    },
+  })
+
+  const [expandedFinding, setExpandedFinding] = useState<string | null>(null)
+  const displayName = respondentName ?? respondentRef ?? 'Anonymous'
+  const visibleTurns = transcript.filter(t => t.speaker.toLowerCase() !== 'system')
+  const generateErrorMsg =
+    generateFindings.error instanceof Error
+      ? generateFindings.error.message
+      : generateFindings.isError
+        ? 'Something went wrong'
+        : null
 
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
           --bg: #111113; --surface: #1E1E20; --surface2: #1A1A1C;
           --ink: #ffffff; --ink-muted: #666; --ink-faint: #444;
           --border: rgba(255,255,255,0.07); --teal: #3DBFA0;
-          --font: 'Inter', system-ui, sans-serif;
         }
         html, body { min-height: 100vh; background: var(--bg); }
         .main { padding: 40px 48px; max-width: 860px; font-family: var(--font); }
@@ -250,9 +222,9 @@ export function SessionDetail({
         </div>
 
         <div
-          className={`section findings-section${generating ? ' generating' : ''}`}
+          className={`section findings-section${generateFindings.isPending ? ' generating' : ''}`}
           style={{
-            opacity: generating ? 0.6 : 1,
+            opacity: generateFindings.isPending ? 0.6 : 1,
             transition: 'opacity 0.3s ease',
           }}
         >
@@ -261,18 +233,18 @@ export function SessionDetail({
             <button
               type="button"
               className="section-btn"
-              onClick={handleGenerateFindings}
-              disabled={generating}
+              onClick={() => generateFindings.mutate()}
+              disabled={generateFindings.isPending}
               style={{
-                color: findings.length === 0 && !generating ? '#3DBFA0' : undefined,
+                color: findings.length === 0 && !generateFindings.isPending ? '#3DBFA0' : undefined,
               }}
             >
-              {generating ? 'Generating...' : findings.length > 0 ? 'Regenerate' : 'Generate'}
+              {generateFindings.isPending ? 'Generating...' : findings.length > 0 ? 'Regenerate' : 'Generate'}
             </button>
           </div>
-          {generateError && findings.length > 0 && (
+          {generateErrorMsg && findings.length > 0 && (
             <div style={{ padding: '0 18px 12px', color: '#E24B4A', fontSize: 12 }}>
-              {generateError}
+              {generateErrorMsg}
             </div>
           )}
           {findings.length > 0 ? (
@@ -545,12 +517,12 @@ export function SessionDetail({
             </div>
           ) : (
             <div className="no-tags">
-              {generating
+              {generateFindings.isPending
                 ? 'Generating findings — this takes a few seconds...'
                 : 'Findings are generated automatically after each session, or you can generate them now.'}
-              {generateError && (
+              {generateErrorMsg && (
                 <div style={{ color: '#E24B4A', fontSize: 12, marginTop: 8 }}>
-                  {generateError}
+                  {generateErrorMsg}
                 </div>
               )}
             </div>

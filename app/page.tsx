@@ -14,8 +14,6 @@ export default function LandingPage() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
-
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         :root {
@@ -27,7 +25,6 @@ export default function LandingPage() {
           --accent: #111110;
           --border: rgba(0,0,0,0.08);
           --teal: #3DBFA0;
-          --font: 'Inter', system-ui, sans-serif;
           --px: 24px;
         }
 

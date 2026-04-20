@@ -1,47 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-
-type Citation = {
-  sessionId: string
-  respondentName: string | null
-  quote: string
-  sentiment: string | null
-  selectionReason: string
-}
-
-type QuestionSummary = {
-  questionText: string
-  synthesis: string
-  skipCount: number
-  sentimentDistribution: { positive: number; mixed: number; negative: number }
-  citations: Citation[]
-}
-
-type Theme = {
-  title: string
-  description: string
-  sessionCount: number
-  citations: Citation[]
-}
-
-type InsightContent = {
-  questionSummaries: QuestionSummary[]
-  themes: Theme[]
-  sentimentDistribution: { positive: number; mixed: number; negative: number }
-  signalStrength: 'strong' | 'moderate' | 'limited'
-  completionQualityDistribution: { rich: number; adequate: number; thin: number }
-}
-
-type Insight = {
-  id: string
-  generatedAt: string
-  sessionCount: number
-  content: InsightContent
-}
-
-type Template = { id: string; name: string }
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import type { InsightsPageData } from '@/lib/queries/insights'
+import {
+  invalidateInsight,
+  invalidateInsightsPage,
+  prefetchInsight,
+  useInsightsPage,
+} from '@/lib/queries/insights-client'
 
 const MIN_SESSIONS = 3
 
@@ -74,55 +42,64 @@ function SentimentPill({ sentiment, count }: { sentiment: string; count: number 
 }
 
 export function InsightsClient({
-  templates,
-  selectedTemplateId,
-  selectedTemplateName,
-  realSessionCount,
-  insight,
+  initialData,
 }: {
-  templates: Template[]
-  selectedTemplateId: string
-  selectedTemplateName: string
-  realSessionCount: number
-  insight: Insight | null
+  initialData: InsightsPageData
 }) {
   const router = useRouter()
+  const queryClient = useQueryClient()
+  const [selectedTemplateId, setSelectedTemplateId] = useState(
+    () => initialData.templates[0]!.id,
+  )
   const [expandedQuestion, setExpandedQuestion] = useState<string | null>(null)
   const [expandedTheme, setExpandedTheme] = useState<string | null>(null)
   const [showTemplateMenu, setShowTemplateMenu] = useState(false)
-  const [generating, setGenerating] = useState(false)
-  const [generateError, setGenerateError] = useState<string | null>(null)
+
+  const { data: pageData = initialData } = useInsightsPage(initialData)
+
+  const selectedTemplate = useMemo(() => {
+    return (
+      pageData.templates.find(t => t.id === selectedTemplateId) ??
+      pageData.templates[0]!
+    )
+  }, [pageData.templates, selectedTemplateId])
+
+  const insight = selectedTemplate.insight
+  const realSessionCount = selectedTemplate.realSessionCount
+  const selectedTemplateName = selectedTemplate.name
+  const templates = pageData.templates
+
+  const generateMutation = useMutation({
+    mutationFn: async (templateId: string) => {
+      const res = await fetch(`/api/insights/${templateId}`, {
+        method: 'POST',
+      })
+      if (!res.ok) throw new Error('Failed to generate insights')
+    },
+    onSettled: (_data, _err, templateId) => {
+      void invalidateInsight(queryClient, templateId)
+      void invalidateInsightsPage(queryClient)
+    },
+  })
 
   const content = insight?.content ?? null
   const hasEnoughSessions = realSessionCount >= MIN_SESSIONS
   const sessionsNotIncluded = realSessionCount - (insight?.sessionCount ?? 0)
-
-  async function handleGenerate() {
-    setGenerating(true)
-    setGenerateError(null)
-    try {
-      const res = await fetch(`/api/insights/${selectedTemplateId}`, {
-        method: 'POST',
-      })
-      if (!res.ok) throw new Error('Failed to generate insights')
-      router.refresh()
-    } catch (err) {
-      setGenerateError(err instanceof Error ? err.message : 'Something went wrong')
-    } finally {
-      setGenerating(false)
-    }
-  }
+  const generateErrorMsg =
+    generateMutation.error instanceof Error
+      ? generateMutation.error.message
+      : generateMutation.isError
+        ? 'Something went wrong'
+        : null
 
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
           --bg: #111113; --surface: #1E1E20; --surface2: #1A1A1C;
           --ink: #ffffff; --ink-muted: #666; --ink-faint: #444;
           --border: rgba(255,255,255,0.07); --teal: #3DBFA0;
-          --font: 'Inter', system-ui, sans-serif;
         }
         html, body { min-height: 100vh; background: var(--bg); }
         .main { padding: 36px 44px; max-width: 1100px; font-family: var(--font); }
@@ -212,10 +189,10 @@ export function InsightsClient({
               <button
                 type="button"
                 className="gen-btn secondary"
-                onClick={handleGenerate}
-                disabled={generating}
+                onClick={() => generateMutation.mutate(selectedTemplateId)}
+                disabled={generateMutation.isPending}
               >
-                {generating ? 'Generating...' : 'Regenerate'}
+                {generateMutation.isPending ? 'Generating...' : 'Regenerate'}
               </button>
             )}
             {templates.length > 1 && (
@@ -237,7 +214,8 @@ export function InsightsClient({
                         className={`template-option ${t.id === selectedTemplateId ? 'active' : ''}`}
                         onClick={() => {
                           setShowTemplateMenu(false)
-                          router.push(`/dashboard/insights?template=${t.id}`)
+                          setSelectedTemplateId(t.id)
+                          void prefetchInsight(queryClient, t.id)
                         }}
                       >
                         {t.name}
@@ -250,7 +228,9 @@ export function InsightsClient({
           </div>
         </div>
 
-        {generateError && <p className="gen-error" style={{ marginBottom: 16 }}>{generateError}</p>}
+        {generateErrorMsg && (
+          <p className="gen-error" style={{ marginBottom: 16 }}>{generateErrorMsg}</p>
+        )}
 
         {!hasEnoughSessions ? (
           <div className="empty-state">
@@ -287,10 +267,10 @@ export function InsightsClient({
               <button
                 type="button"
                 className="gen-btn"
-                onClick={handleGenerate}
-                disabled={generating}
+                onClick={() => generateMutation.mutate(selectedTemplateId)}
+                disabled={generateMutation.isPending}
               >
-                {generating ? 'Generating...' : 'Generate insights'}
+                {generateMutation.isPending ? 'Generating...' : 'Generate insights'}
               </button>
             </div>
 

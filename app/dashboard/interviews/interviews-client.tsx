@@ -2,18 +2,9 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import type { InterviewsData } from '@/lib/queries/interviews'
+import { useInterviews } from '@/lib/queries/interviews-client'
 import { NewInterviewModal } from '../new-interview-modal'
-
-type Interview = {
-  id: string
-  name: string
-  active: boolean
-  createdAt: string
-  updatedAt: string
-  linkCount: number
-  completedCount: number
-  lastActivityAt: string | null
-}
 
 function timeAgo(iso: string) {
   const diff = Date.now() - new Date(iso).getTime()
@@ -24,20 +15,24 @@ function timeAgo(iso: string) {
   return `${Math.floor(hrs / 24)}d ago`
 }
 
-export function InterviewsClient({ interviews }: { interviews: Interview[] }) {
+export function InterviewsClient({
+  initialData,
+}: {
+  initialData: InterviewsData
+}) {
   const router = useRouter()
   const [showModal, setShowModal] = useState(false)
+  const { data: listData = initialData } = useInterviews(initialData)
+  const { interviews } = listData
 
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
           --bg: #111113; --surface: #1E1E20; --surface2: #1A1A1C;
           --ink: #ffffff; --ink-muted: #666; --ink-faint: #444;
           --border: rgba(255,255,255,0.07); --teal: #3DBFA0;
-          --font: 'Inter', system-ui, sans-serif;
         }
         .page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px; }
         .page-title { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; color: var(--ink); }

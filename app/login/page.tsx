@@ -33,8 +33,6 @@ export default function LoginPage() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
-
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         :root {
@@ -45,7 +43,6 @@ export default function LoginPage() {
           --ink-faint: #ADADAA;
           --border: rgba(0,0,0,0.08);
           --error: #C0392B;
-          --font: 'Inter', system-ui, sans-serif;
         }
 
         html, body { height: 100%; background: var(--bg); }

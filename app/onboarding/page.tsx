@@ -83,7 +83,6 @@ export default function OnboardingPage() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
           --bg: #111113;
@@ -95,7 +94,6 @@ export default function OnboardingPage() {
           --border: rgba(255,255,255,0.08);
           --border-hover: rgba(255,255,255,0.15);
           --teal: #3DBFA0;
-          --font: 'Inter', system-ui, sans-serif;
         }
         html, body { min-height: 100vh; background: var(--bg); }
         .page { font-family: var(--font); background: var(--bg); min-height: 100vh; display: grid; grid-template-rows: auto 1fr; }

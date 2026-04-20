@@ -1,17 +1,16 @@
-import { redirect } from 'next/navigation'
+import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getDashboardData } from '@/lib/queries/dashboard'
-import { DashboardShell } from './dashboard-shell'
 
-export default async function DashboardPage() {
+export async function GET() {
   const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const data = await getDashboardData(user.id)
-  if (!data) redirect('/onboarding')
+  if (!data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  return <DashboardShell initialData={data} />
+  return NextResponse.json(data)
 }
