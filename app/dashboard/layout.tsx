@@ -18,7 +18,7 @@ export default async function DashboardLayout({
       gridTemplateColumns: '220px 1fr',
       minHeight: '100vh',
       fontFamily: 'Inter, system-ui, sans-serif',
-      background: '#111113',
+      background: '#0C0C0E',
     }}>
       <Sidebar email={user.email ?? ''} />
       <div>{children}</div>

@@ -8,6 +8,9 @@ import { generateFindings } from "@/lib/findings";
 export const runtime = "nodejs";
 
 /**
+ * Configure this route in Vapi as the Server URL, e.g. production:
+ * `https://newseason.ai/api/webhooks/vapi`
+ *
  * Vapi Server URL POST body shape (see https://docs.vapi.ai/server-url/events):
  * `{ "message": { "type": "<server-message-type>", "call": { ... }, ... } }`
  *
@@ -182,8 +185,7 @@ export async function POST(request: Request) {
       }
     });
 
-    // Fire and forget
-    void generateFindings(session.id);
+    await generateFindings(session.id);
 
     return ok();
   } catch (err) {

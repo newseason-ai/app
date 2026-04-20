@@ -95,6 +95,7 @@ export function InsightsClient({
 
   const content = insight?.content ?? null
   const hasEnoughSessions = realSessionCount >= MIN_SESSIONS
+  const sessionsNotIncluded = realSessionCount - (insight?.sessionCount ?? 0)
 
   async function handleGenerate() {
     setGenerating(true)
@@ -166,12 +167,12 @@ export function InsightsClient({
         .section-title { font-size: 11px; font-weight: 500; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.08em; }
         .section-sub { font-size: 11px; color: var(--ink-faint); }
 
-        .q-row { padding: 16px 20px; border-bottom: 1px solid rgba(255,255,255,0.04); cursor: pointer; transition: background 0.15s; }
+        .q-row { display: block; padding: 16px 20px; border-bottom: 1px solid rgba(255,255,255,0.04); cursor: pointer; transition: background 0.15s; }
         .q-row:last-child { border-bottom: none; }
         .q-row:hover { background: rgba(255,255,255,0.02); }
-        .q-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 12px; }
-        .q-label { font-size: 11px; font-weight: 600; color: #777; text-transform: uppercase; letter-spacing: 0.07em; flex: 1; }
-        .q-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+        .q-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; gap: 16px; }
+        .q-label { font-size: 11px; font-weight: 600; color: #777; text-transform: uppercase; letter-spacing: 0.05em; flex: 1; line-height: 1.5; max-width: 60%; }
+        .q-right { display: flex; align-items: flex-start; gap: 8px; flex-shrink: 0; }
         .q-chevron { font-size: 12px; color: #333; }
         .q-synthesis { font-size: 13px; color: #ccc; line-height: 1.65; }
         .q-skip { font-size: 11px; color: var(--ink-faint); margin-top: 6px; }
@@ -193,30 +194,34 @@ export function InsightsClient({
         .theme-expanded { padding: 0 20px 16px; border-top: 1px solid rgba(255,255,255,0.04); }
         .theme-description { font-size: 13px; color: #ccc; line-height: 1.65; padding: 14px 0 10px; }
 
-        .sess-table { width: 100%; }
-        .sess-header { display: grid; grid-template-columns: 1fr 100px 100px 80px 50px; gap: 12px; padding: 10px 20px; border-bottom: 1px solid rgba(255,255,255,0.05); }
-        .sess-col { font-size: 10px; font-weight: 500; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.06em; }
-        .sess-row { display: grid; grid-template-columns: 1fr 100px 100px 80px 50px; gap: 12px; padding: 12px 20px; border-bottom: 1px solid rgba(255,255,255,0.04); cursor: pointer; transition: background 0.1s; align-items: center; }
-        .sess-row:last-child { border-bottom: none; }
-        .sess-row:hover { background: rgba(255,255,255,0.02); }
-        .sess-name { font-size: 13px; font-weight: 500; color: var(--ink); }
-        .sess-date { font-size: 11px; color: var(--ink-faint); margin-top: 1px; }
-        .sess-badge { font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 100px; display: inline-block; }
-        .sess-link { font-size: 11px; color: var(--teal); cursor: pointer; }
-
         .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 80px 40px; text-align: center; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; }
         .empty-title { font-size: 16px; font-weight: 600; color: var(--ink); margin-bottom: 8px; letter-spacing: -0.01em; }
         .empty-sub { font-size: 13px; color: var(--ink-faint); line-height: 1.6; max-width: 360px; margin-bottom: 24px; }
-        .empty-warning { font-size: 12px; color: #EF9F27; margin-top: 8px; }
       `}</style>
 
       <div className="main">
         <div className="page-header">
           <div className="page-title">Insights</div>
           <div className="header-right">
+            {insight && (
+              <span className="gen-meta">
+                Generated {timeAgo(insight.generatedAt)} · {insight.sessionCount} sessions
+              </span>
+            )}
+            {hasEnoughSessions && insight && (
+              <button
+                type="button"
+                className="gen-btn secondary"
+                onClick={handleGenerate}
+                disabled={generating}
+              >
+                {generating ? 'Generating...' : 'Regenerate'}
+              </button>
+            )}
             {templates.length > 1 && (
               <div className="template-selector">
                 <button
+                  type="button"
                   className="template-btn"
                   onClick={() => setShowTemplateMenu(!showTemplateMenu)}
                 >
@@ -242,22 +247,6 @@ export function InsightsClient({
                 )}
               </div>
             )}
-
-            {insight && (
-              <span className="gen-meta">
-                Generated {timeAgo(insight.generatedAt)} · {insight.sessionCount} sessions
-              </span>
-            )}
-
-            {hasEnoughSessions ? (
-              <button
-                className={`gen-btn ${insight ? 'secondary' : ''}`}
-                onClick={handleGenerate}
-                disabled={generating}
-              >
-                {generating ? 'Generating...' : insight ? 'Regenerate' : 'Generate insights'}
-              </button>
-            ) : null}
           </div>
         </div>
 
@@ -272,25 +261,65 @@ export function InsightsClient({
             </div>
           </div>
         ) : !insight ? (
-          <div className="empty-state">
-            <div className="empty-title">No insights generated yet</div>
-            <div className="empty-sub">
-              You have {realSessionCount} responses ready to analyze.
-              Generate insights to see a synthesis across all sessions.
-            </div>
-            {realSessionCount < 10 && (
-              <p className="empty-warning">
-                Fewer than 10 responses — insights may not be fully representative.
-              </p>
-            )}
-            <button
-              className="gen-btn"
-              onClick={handleGenerate}
-              disabled={generating}
-              style={{ marginTop: 8 }}
+          <div style={{
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 14,
+            overflow: 'hidden',
+          }}
+          >
+            <div style={{
+              padding: '20px 24px',
+              borderBottom: '1px solid rgba(255,255,255,0.05)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}
             >
-              {generating ? 'Generating...' : 'Generate insights'}
-            </button>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: '#fff', marginBottom: 4, letterSpacing: '-0.01em' }}>
+                  Ready to generate
+                </div>
+                <div style={{ fontSize: 13, color: '#444' }}>
+                  {realSessionCount} response{realSessionCount === 1 ? '' : 's'} collected · insights will synthesize findings across all sessions
+                </div>
+              </div>
+              <button
+                type="button"
+                className="gen-btn"
+                onClick={handleGenerate}
+                disabled={generating}
+              >
+                {generating ? 'Generating...' : 'Generate insights'}
+              </button>
+            </div>
+
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+              <div style={{ fontSize: 11, fontWeight: 500, color: '#333', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 16 }}>
+                Question synthesis
+              </div>
+              {[70, 85, 60].map((w, i) => (
+                <div key={i} style={{ marginBottom: 20 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <div style={{ width: `${w}%`, height: 10, background: 'rgba(255,255,255,0.04)', borderRadius: 4 }} />
+                    <div style={{ width: 48, height: 10, background: 'rgba(255,255,255,0.04)', borderRadius: 100 }} />
+                  </div>
+                  <div style={{ width: '100%', height: 10, background: 'rgba(255,255,255,0.03)', borderRadius: 4, marginBottom: 6 }} />
+                  <div style={{ width: '80%', height: 10, background: 'rgba(255,255,255,0.03)', borderRadius: 4 }} />
+                </div>
+              ))}
+            </div>
+
+            <div style={{ padding: '20px 24px' }}>
+              <div style={{ fontSize: 11, fontWeight: 500, color: '#333', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 14 }}>
+                Emerging themes
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {[100, 140, 90, 120, 80].map((w, i) => (
+                  <div key={i} style={{ width: w, height: 30, background: 'rgba(255,255,255,0.03)', borderRadius: 100 }} />
+                ))}
+              </div>
+            </div>
           </div>
         ) : (
           <>
@@ -471,6 +500,18 @@ export function InsightsClient({
                     </div>
                   )
                 })()}
+              </div>
+            )}
+
+            {sessionsNotIncluded > 0 && (
+              <div style={{
+                fontSize: 12,
+                color: '#444',
+                textAlign: 'center',
+                padding: '12px 0 4px',
+              }}
+              >
+                {sessionsNotIncluded} new session{sessionsNotIncluded === 1 ? '' : 's'} collected since last generation — regenerate to include {sessionsNotIncluded === 1 ? 'it' : 'them'}.
               </div>
             )}
           </>

@@ -57,7 +57,7 @@ export function Sidebar({ email }: { email: string }) {
 
   return (
     <aside style={{
-      background: '#0D0D0F',
+      background: '#080809',
       borderRight: '1px solid rgba(255,255,255,0.07)',
       padding: '20px 0',
       display: 'flex',
