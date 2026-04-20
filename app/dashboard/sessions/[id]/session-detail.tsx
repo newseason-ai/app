@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { formatDuration } from '@/lib/format'
 
@@ -11,12 +12,14 @@ type Turn = {
   startedAtS: number
 }
 
-type Tag = {
+type Finding = {
   id: string
-  label: string
-  sentiment: string
-  sourceQuote: string
-  phase: string
+  questionText: string | null
+  title: string | null
+  synthesis: string
+  evidence: string
+  sentiment: string | null
+  turnIndex: number | null
 }
 
 type Session = {
@@ -27,6 +30,8 @@ type Session = {
   endedAt: string | null
   followUpOptIn: boolean
   vapiCallId: string
+  sentiment: string | null
+  completionQuality: string | null
 }
 
 function formatTime(s: number) {
@@ -40,12 +45,6 @@ function formatDate(iso: string) {
     month: 'short', day: 'numeric', year: 'numeric',
     hour: 'numeric', minute: '2-digit',
   })
-}
-
-const SENTIMENT_STYLES: Record<string, { bg: string; color: string }> = {
-  positive: { bg: '#0F3D2E', color: '#3DBFA0' },
-  negative: { bg: '#3D1A1A', color: '#E24B4A' },
-  neutral: { bg: 'rgba(255,255,255,0.06)', color: '#888' },
 }
 
 async function copyTranscript(transcript: Turn[]) {
@@ -69,7 +68,7 @@ async function copyTranscript(transcript: Turn[]) {
 export function SessionDetail({
   session,
   transcript,
-  tags,
+  findings,
   respondentName,
   respondentRef,
   respondentContext,
@@ -79,7 +78,7 @@ export function SessionDetail({
 }: {
   session: Session
   transcript: Turn[]
-  tags: Tag[]
+  findings: Finding[]
   respondentName: string | null
   respondentRef: string | null
   respondentContext: string | null
@@ -88,8 +87,27 @@ export function SessionDetail({
   fromLabel: string
 }) {
   const router = useRouter()
+  const [generating, setGenerating] = useState(false)
+  const [generateError, setGenerateError] = useState<string | null>(null)
+  const [expandedFinding, setExpandedFinding] = useState<string | null>(null)
   const displayName = respondentName ?? respondentRef ?? 'Anonymous'
   const visibleTurns = transcript.filter(t => t.speaker.toLowerCase() !== 'system')
+
+  async function handleGenerateFindings() {
+    setGenerating(true)
+    setGenerateError(null)
+    try {
+      const res = await fetch(`/api/sessions/${session.id}/findings`, {
+        method: 'POST',
+      })
+      if (!res.ok) throw new Error('Failed to generate findings')
+      router.refresh()
+    } catch (err) {
+      setGenerateError(err instanceof Error ? err.message : 'Something went wrong')
+    } finally {
+      setGenerating(false)
+    }
+  }
 
   return (
     <>
@@ -126,16 +144,22 @@ export function SessionDetail({
         .section-header { padding: 13px 18px; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center; }
         .section-title { font-size: 11px; font-weight: 500; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.08em; }
         .section-btn { font-family: var(--font); font-size: 11px; color: var(--ink-faint); background: none; border: none; cursor: pointer; transition: color 0.15s; padding: 0; }
-        .section-btn:hover { color: var(--ink-muted); }
+        .section-btn:hover:not(:disabled) { color: var(--ink-muted); }
+        .section-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
-        .tags-body { padding: 14px 18px; display: flex; flex-wrap: wrap; gap: 8px; }
-        .tag { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 100px; font-size: 12px; font-weight: 500; }
-        .tag-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
-        .tag-quote { font-size: 12px; color: var(--ink-faint); padding: 0 18px 14px; font-style: italic; line-height: 1.6; border-top: 1px solid rgba(255,255,255,0.04); padding-top: 10px; margin-top: 2px; }
+        .section.findings-section.generating {
+          animation: findingsSectionPulse 1.4s ease-in-out infinite;
+        }
+        @keyframes findingsSectionPulse {
+          0%, 100% { border-color: rgba(255, 255, 255, 0.07); }
+          50% { border-color: rgba(61, 191, 160, 0.22); }
+        }
+
+        .findings-empty { padding: 20px 18px; font-size: 12px; color: #333; font-style: italic; }
         .no-tags { padding: 20px 18px; font-size: 12px; color: #333; font-style: italic; }
 
         .transcript-body { padding: 4px 0; }
-        .turn { display: grid; grid-template-columns: 76px 1fr; gap: 12px; padding: 10px 18px; border-bottom: 1px solid rgba(255,255,255,0.03); }
+        .turn { display: grid; grid-template-columns: 76px 1fr; gap: 12px; padding: 10px 18px; border-bottom: 1px solid rgba(255,255,255,0.03); transition: background 0.3s ease; }
         .turn:last-child { border-bottom: none; }
         .turn-meta { display: flex; flex-direction: column; align-items: flex-end; padding-top: 2px; gap: 3px; }
         .turn-speaker { font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; }
@@ -158,6 +182,19 @@ export function SessionDetail({
             <div className="interview-ref">
               {interviewName} · {formatDate(session.startedAt)}
             </div>
+            {respondentContext && (
+              <div style={{
+                fontSize: 12,
+                color: '#666',
+                lineHeight: 1.6,
+                marginTop: 5,
+                maxWidth: 860,
+                fontStyle: 'normal',
+              }}
+              >
+                {respondentContext}
+              </div>
+            )}
           </div>
           {session.followUpOptIn && (
             <span className="opt-in-badge">
@@ -183,45 +220,339 @@ export function SessionDetail({
             <div className="meta-value">{visibleTurns.length}</div>
           </div>
           <div className="meta-item">
-            <div className="meta-label">
-              {respondentContext ? 'Respondent context' : 'Date'}
+            <div className="meta-label">Sentiment</div>
+            <div className="meta-value" style={{
+              color: session.sentiment === 'positive' ? '#3DBFA0'
+                : session.sentiment === 'negative' ? '#E24B4A'
+                  : session.sentiment === 'mixed' ? '#EF9F27'
+                    : '#444',
+            }}
+            >
+              {session.sentiment
+                ? session.sentiment.charAt(0).toUpperCase() + session.sentiment.slice(1)
+                : '—'}
             </div>
-            <div className="meta-value muted">
-              {respondentContext ?? formatDate(session.startedAt)}
+          </div>
+          <div className="meta-item">
+            <div className="meta-label">Response quality</div>
+            <div className="meta-value" style={{
+              color: session.completionQuality === 'rich' ? '#3DBFA0'
+                : session.completionQuality === 'adequate' ? '#EF9F27'
+                  : session.completionQuality === 'thin' ? '#666'
+                    : '#444',
+            }}
+            >
+              {session.completionQuality
+                ? session.completionQuality.charAt(0).toUpperCase() + session.completionQuality.slice(1)
+                : '—'}
             </div>
           </div>
         </div>
 
-        <div className="section">
+        <div
+          className={`section findings-section${generating ? ' generating' : ''}`}
+          style={{
+            opacity: generating ? 0.6 : 1,
+            transition: 'opacity 0.3s ease',
+          }}
+        >
           <div className="section-header">
-            <span className="section-title">Tags</span>
+            <span className="section-title">Findings</span>
+            <button
+              type="button"
+              className="section-btn"
+              onClick={handleGenerateFindings}
+              disabled={generating}
+              style={{
+                color: findings.length === 0 && !generating ? '#3DBFA0' : undefined,
+              }}
+            >
+              {generating ? 'Generating...' : findings.length > 0 ? 'Regenerate' : 'Generate'}
+            </button>
           </div>
-          {tags.length > 0 ? (
-            <>
-              <div className="tags-body">
-                {tags.map(tag => {
-                  const style = SENTIMENT_STYLES[tag.sentiment] ?? SENTIMENT_STYLES.neutral
-                  return (
-                    <span
-                      key={tag.id}
-                      className="tag"
-                      style={{ background: style.bg, color: style.color }}
+          {generateError && findings.length > 0 && (
+            <div style={{ padding: '0 18px 12px', color: '#E24B4A', fontSize: 12 }}>
+              {generateError}
+            </div>
+          )}
+          {findings.length > 0 ? (
+            <div style={{ paddingBottom: 4 }}>
+            <div style={{ padding: '4px 0' }}>
+              {findings.filter(f => f.questionText).map(f => (
+                <div
+                  key={f.id}
+                  onClick={() => setExpandedFinding(expandedFinding === f.id ? null : f.id)}
+                  style={{
+                    padding: '18px 20px',
+                    borderBottom: '1px solid rgba(255,255,255,0.04)',
+                    cursor: 'pointer',
+                    transition: 'background 0.15s',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = 'rgba(255,255,255,0.02)'
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = ''
+                  }}
+                >
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: 10,
+                  }}
+                  >
+                    <div style={{
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: '#777',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.07em',
+                    }}
                     >
-                      <span className="tag-dot" />
-                      {tag.label}
-                    </span>
-                  )
-                })}
-              </div>
-              {tags[0]?.sourceQuote && (
-                <div className="tag-quote">
-                  &ldquo;{tags[0].sourceQuote}&rdquo;
+                      {f.questionText}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: 12 }}>
+                      {f.sentiment && f.sentiment !== 'neutral' && (
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          fontSize: 11,
+                          fontWeight: 500,
+                          padding: '2px 8px',
+                          borderRadius: 100,
+                          background: f.sentiment === 'positive' ? 'rgba(61,191,160,0.12)'
+                            : f.sentiment === 'negative' ? 'rgba(226,75,74,0.12)'
+                              : 'rgba(239,159,39,0.12)',
+                          color: f.sentiment === 'positive' ? '#3DBFA0'
+                            : f.sentiment === 'negative' ? '#E24B4A'
+                              : '#EF9F27',
+                        }}
+                        >
+                          <span style={{
+                            width: 4,
+                            height: 4,
+                            borderRadius: '50%',
+                            background: 'currentColor',
+                            display: 'inline-block',
+                          }}
+                          />
+                          {f.sentiment.charAt(0).toUpperCase() + f.sentiment.slice(1)}
+                        </span>
+                      )}
+                      <span style={{ fontSize: 13, color: '#333', marginLeft: 4 }}>
+                        {expandedFinding === f.id ? '↑' : '↓'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <p style={{
+                    fontSize: 13,
+                    color: '#ccc',
+                    lineHeight: 1.65,
+                    margin: 0,
+                  }}
+                  >
+                    {f.synthesis}
+                  </p>
+
+                  {expandedFinding === f.id && (
+                    <div
+                      onClick={e => e.stopPropagation()}
+                      style={{
+                        marginTop: 14,
+                        borderLeft: '2px solid rgba(255,255,255,0.08)',
+                        paddingLeft: 12,
+                      }}
+                    >
+                      <p style={{
+                        fontSize: 12,
+                        color: '#666',
+                        fontStyle: 'italic',
+                        lineHeight: 1.6,
+                        marginBottom: f.turnIndex !== null ? 8 : 0,
+                      }}
+                      >
+                        &ldquo;{f.evidence}&rdquo;
+                      </p>
+                      {f.turnIndex !== null && (
+                        <button
+                          type="button"
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: '#3DBFA0',
+                            fontSize: 11,
+                            cursor: 'pointer',
+                            padding: 0,
+                            fontFamily: 'var(--font, system-ui)',
+                          }}
+                          onClick={() => {
+                            const el = document.getElementById(`turn-${f.turnIndex}`)
+                            if (el) {
+                              el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                              el.style.background = 'rgba(61,191,160,0.08)'
+                              setTimeout(() => { el.style.background = '' }, 2000)
+                            }
+                          }}
+                        >
+                          ↓ View in transcript
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
+              ))}
+
+              {findings.filter(f => !f.questionText).length > 0 && (
+                <>
+                  <div style={{
+                    padding: '20px 20px 4px',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: '#333',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.08em',
+                    borderTop: '1px solid rgba(255,255,255,0.04)',
+                  }}
+                  >
+                    Other observations
+                  </div>
+                  {findings.filter(f => !f.questionText).map(f => (
+                    <div
+                      key={f.id}
+                      onClick={() => setExpandedFinding(expandedFinding === f.id ? null : f.id)}
+                      style={{
+                        padding: '18px 20px',
+                        borderBottom: '1px solid rgba(255,255,255,0.04)',
+                        cursor: 'pointer',
+                        transition: 'background 0.15s',
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.background = 'rgba(255,255,255,0.02)'
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.background = ''
+                      }}
+                    >
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: 10,
+                      }}
+                      >
+                        <div style={{
+                          fontSize: 11,
+                          fontWeight: 600,
+                          color: '#777',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.07em',
+                        }}
+                        >
+                          {f.title ?? 'Observation'}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: 12 }}>
+                          {f.sentiment && f.sentiment !== 'neutral' && (
+                            <span style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              fontSize: 11,
+                              fontWeight: 500,
+                              padding: '2px 8px',
+                              borderRadius: 100,
+                              background: f.sentiment === 'positive' ? 'rgba(61,191,160,0.12)'
+                                : f.sentiment === 'negative' ? 'rgba(226,75,74,0.12)'
+                                  : 'rgba(239,159,39,0.12)',
+                              color: f.sentiment === 'positive' ? '#3DBFA0'
+                                : f.sentiment === 'negative' ? '#E24B4A'
+                                  : '#EF9F27',
+                            }}
+                            >
+                              <span style={{
+                                width: 4,
+                                height: 4,
+                                borderRadius: '50%',
+                                background: 'currentColor',
+                                display: 'inline-block',
+                              }}
+                              />
+                              {f.sentiment.charAt(0).toUpperCase() + f.sentiment.slice(1)}
+                            </span>
+                          )}
+                          <span style={{ fontSize: 13, color: '#333', marginLeft: 4 }}>
+                            {expandedFinding === f.id ? '↑' : '↓'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <p style={{ fontSize: 13, color: '#ccc', lineHeight: 1.65, margin: 0 }}>
+                        {f.synthesis}
+                      </p>
+
+                      {expandedFinding === f.id && (
+                        <div
+                          onClick={e => e.stopPropagation()}
+                          style={{
+                            marginTop: 14,
+                            borderLeft: '2px solid rgba(255,255,255,0.08)',
+                            paddingLeft: 12,
+                          }}
+                        >
+                          <p style={{
+                            fontSize: 12,
+                            color: '#666',
+                            fontStyle: 'italic',
+                            lineHeight: 1.6,
+                            marginBottom: f.turnIndex !== null ? 8 : 0,
+                          }}
+                          >
+                            &ldquo;{f.evidence}&rdquo;
+                          </p>
+                          {f.turnIndex !== null && (
+                            <button
+                              type="button"
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#3DBFA0',
+                                fontSize: 11,
+                                cursor: 'pointer',
+                                padding: 0,
+                                fontFamily: 'var(--font, system-ui)',
+                              }}
+                              onClick={() => {
+                                const el = document.getElementById(`turn-${f.turnIndex}`)
+                                if (el) {
+                                  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                                  el.style.background = 'rgba(61,191,160,0.08)'
+                                  setTimeout(() => { el.style.background = '' }, 2000)
+                                }
+                              }}
+                            >
+                              ↓ View in transcript
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </>
               )}
-            </>
+            </div>
+            </div>
           ) : (
             <div className="no-tags">
-              No tags yet — tags are generated automatically after each session.
+              {generating
+                ? 'Generating findings — this takes a few seconds...'
+                : 'Findings are generated automatically after each session, or you can generate them now.'}
+              {generateError && (
+                <div style={{ color: '#E24B4A', fontSize: 12, marginTop: 8 }}>
+                  {generateError}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -246,7 +577,7 @@ export function SessionDetail({
                              turn.speaker.toLowerCase() === 'ai'
                 const speakerLabel = isAI ? 'AI' : (respondentName ?? 'Respondent')
                 return (
-                  <div className="turn" key={turn.id}>
+                  <div className="turn" key={turn.id} id={`turn-${turn.turnIndex}`}>
                     <div className="turn-meta">
                       <span className={`turn-speaker ${isAI ? 'ai' : 'user'}`}>
                         {speakerLabel}
@@ -260,7 +591,7 @@ export function SessionDetail({
                 )
               })
             ) : (
-              <div className="no-tags">No transcript available for this session.</div>
+              <div className="findings-empty">No transcript available for this session.</div>
             )}
           </div>
         </div>

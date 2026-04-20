@@ -41,6 +41,7 @@ model Template {
   createdAt         DateTime    @default(now()) @map("created_at")
   updatedAt         DateTime    @updatedAt @map("updated_at")
   linkTokens        LinkToken[]
+  insights          Insight[]
 
   @@index([companyId])
   @@map("templates")
@@ -65,19 +66,21 @@ model LinkToken {
 }
 
 model Session {
-  id              String           @id @default(cuid())
-  linkTokenId     String           @map("link_token_id")
-  linkToken       LinkToken        @relation(fields: [linkTokenId], references: [id], onDelete: Cascade)
-  respondentRef   String?          @map("respondent_ref")
-  vapiCallId      String           @map("vapi_call_id")
-  status          SessionStatus
-  durationS       Int?             @map("duration_s")
-  audioS3Key      String?          @map("audio_s3_key")
-  startedAt       DateTime         @map("started_at")
-  endedAt         DateTime?        @map("ended_at")
-  followUpOptIn   Boolean          @default(false) @map("follow_up_opt_in")
-  transcriptTurns TranscriptTurn[]
-  tags            Tag[]
+  id                String           @id @default(cuid())
+  linkTokenId       String           @map("link_token_id")
+  linkToken         LinkToken        @relation(fields: [linkTokenId], references: [id], onDelete: Cascade)
+  respondentRef     String?          @map("respondent_ref")
+  vapiCallId        String           @map("vapi_call_id")
+  status            SessionStatus
+  durationS         Int?             @map("duration_s")
+  audioS3Key        String?          @map("audio_s3_key")
+  startedAt         DateTime         @map("started_at")
+  endedAt           DateTime?        @map("ended_at")
+  followUpOptIn     Boolean          @default(false) @map("follow_up_opt_in")
+  sentiment         String?
+  completionQuality String?          @map("completion_quality")
+  transcriptTurns   TranscriptTurn[]
+  findings          Finding[]
 
   @@index([linkTokenId])
   @@index([vapiCallId])
@@ -97,16 +100,30 @@ model TranscriptTurn {
   @@map("transcript_turns")
 }
 
-model Tag {
-  id          String   @id @default(cuid())
-  sessionId   String   @map("session_id")
-  session     Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  label       String
-  sentiment   String
-  sourceQuote String   @map("source_quote")
-  phase       String
-  createdAt   DateTime @default(now()) @map("created_at")
+model Finding {
+  id           String   @id @default(cuid())
+  sessionId    String   @map("session_id")
+  session      Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  questionText String?  @map("question_text")
+  title        String?
+  synthesis    String
+  evidence     String
+  sentiment    String?
+  turnIndex    Int?     @map("turn_index")
+  createdAt    DateTime @default(now()) @map("created_at")
 
   @@index([sessionId])
-  @@map("tags")
+  @@map("findings")
+}
+
+model Insight {
+  id           String   @id @default(cuid())
+  templateId   String   @map("template_id")
+  template     Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  generatedAt  DateTime @default(now()) @map("generated_at")
+  sessionCount Int      @map("session_count")
+  content      Json
+
+  @@index([templateId])
+  @@map("insights")
 }

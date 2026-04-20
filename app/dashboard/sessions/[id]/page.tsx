@@ -26,7 +26,7 @@ export default async function SessionPage({
         },
         orderBy: { turnIndex: 'asc' }
       },
-      tags: {
+      findings: {
         orderBy: { createdAt: 'asc' }
       },
       linkToken: {
@@ -38,11 +38,6 @@ export default async function SessionPage({
       }
     }
   })
-
-
-  console.log('session id:', id)
-  console.log('transcript turns found:', session?.transcriptTurns.length)
-  console.log('raw turns:', session?.transcriptTurns)
 
   if (!session) notFound()
   if (session.linkToken.template.company.userId !== user.id) notFound()
@@ -61,6 +56,8 @@ export default async function SessionPage({
         endedAt: session.endedAt?.toISOString() ?? null,
         followUpOptIn: session.followUpOptIn,
         vapiCallId: session.vapiCallId,
+        sentiment: session.sentiment,
+        completionQuality: session.completionQuality,
       }}
       transcript={session.transcriptTurns.map(t => ({
         id: t.id,
@@ -69,12 +66,14 @@ export default async function SessionPage({
         turnIndex: t.turnIndex,
         startedAtS: t.startedAtS,
       }))}
-      tags={session.tags.map(t => ({
-        id: t.id,
-        label: t.label,
-        sentiment: t.sentiment,
-        sourceQuote: t.sourceQuote,
-        phase: t.phase,
+      findings={session.findings.map(f => ({
+        id: f.id,
+        questionText: f.questionText,
+        title: f.title,
+        synthesis: f.synthesis,
+        evidence: f.evidence,
+        sentiment: f.sentiment,
+        turnIndex: f.turnIndex,
       }))}
       respondentName={respondentName}
       respondentRef={linkToken.respondentRef}

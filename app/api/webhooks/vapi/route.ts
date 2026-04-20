@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { SessionStatus } from "@/app/generated/prisma/enums";
 import { db } from "@/lib/db";
+import { generateFindings } from "@/lib/findings";
 
 /** Prisma + `pg` require Node (not Edge). */
 export const runtime = "nodejs";
@@ -180,6 +181,9 @@ export async function POST(request: Request) {
         });
       }
     });
+
+    // Fire and forget
+    void generateFindings(session.id);
 
     return ok();
   } catch (err) {
