@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 type NavItem = {
@@ -87,7 +88,7 @@ export function Sidebar({ email }: { email: string }) {
       {items.map(item => {
         const active = isActive(item)
         return (
-          <a
+          <Link
             key={item.href}
             href={item.href}
             style={{
@@ -104,7 +105,7 @@ export function Sidebar({ email }: { email: string }) {
           >
             {item.icon}
             {item.label}
-          </a>
+          </Link>
         )
       })}
 
