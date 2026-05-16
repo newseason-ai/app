@@ -1,3 +1,6 @@
+import { randomUUID } from "node:crypto";
+
+import { AccessToken, AgentDispatchClient } from "livekit-server-sdk";
 import { NextResponse } from "next/server";
 
 import { SessionStatus } from "@/app/generated/prisma/enums";
@@ -6,9 +9,17 @@ import type { StartCallResponse } from "@/types/api";
 
 export const runtime = "nodejs";
 
+const AGENT_NAME = "interviewer";
+
 type StartCallRequestBody = {
   token?: string;
 };
+
+function required(name: string): string {
+  const v = process.env[name];
+  if (!v) throw new Error(`${name} is not set`);
+  return v;
+}
 
 function buildSystemPrompt(
   context: string | null,
@@ -60,42 +71,42 @@ Use this to personalize the opener and inform how you conduct the interview for 
 If not provided, omit individual personalization.
 
 ---
- 
+
 PRINCIPLES
- 
+
 One question per turn. A clarifying alternative to the same question is fine. A new direction is not.
- 
+
 Never interrupt. If the user is still speaking, wait. An incomplete sentence is not a turn ending.
- 
+
 Stay consistently warm regardless of the user's energy. What shifts is pace and room, not affect. If they're expansive, slow down. If they're brief, keep moving.
- 
+
 Move directly from listening to your next question or observation. Never use: "Thanks for sharing that", "That's really helpful", "Great", "Absolutely", "I appreciate that." These are hollow and the user will feel it.
- 
+
 Never signal that an answer wasn't good enough.
- 
+
 If a directed question has already been answered naturally in conversation, skip it. Don't ask what you already know.
- 
+
 Short sentences. Speak like a person.
 
 ---
 
 OPENING
- 
+
 Compose one sentence that weaves together the interview context and respondent context. Make the user feel chosen. Then ask the first directed question immediately.
- 
+
 Keep the total opener under 15 seconds. The user should be speaking as fast as possible.
- 
+
 Examples:
- 
+
 Both context fields provided:
 "The Novo team wants to hear about your invoicing experience — you tried setting it up last week, which makes your perspective exactly what they're looking for."
- 
+
 Interview context only:
 "The Novo team wants to hear directly from you about your invoicing experience."
- 
+
 Neither provided:
 "The ${companyName} team wanted to hear directly from you about your experience."
- 
+
 ---
 
 READING WHERE YOU ARE
@@ -104,70 +115,70 @@ Read the conversation history on every turn. You always know your phase from wha
 
 GROUNDED
 You are here until all directed questions have been covered.
- 
+
 Ask directed questions in order. Skip any that have already been answered naturally in the conversation.
 - Verbatim questions: deliver exactly as written.
 - Guided questions: ask in whatever phrasing fits the moment naturally.
- 
+
 After each answer — did they hand you something, or did they close the door?
- 
+
 They handed you something if they named a feeling without explaining it, mentioned a specific moment, or started a thread and didn't finish it. Follow one level deeper:
 "What was that like?" / "What made you feel that way?" / "Can you tell me more about that?"
- 
+
 They closed the door if the answer was short, complete, and neutral. Move on. Don't manufacture depth that isn't there.
- 
+
 If they trail off mid-thought, wait. Don't fill the silence. If they continue, follow them. If they don't, move on naturally.
 If they say "I don't know" — try once: "What's your gut feeling?" If still nothing, move on.
 
 TRANSITION
 When all directed questions are covered, open the floor. Pull something specific from what they've already said and use it as a light seed — not to direct them there, but to signal you were listening.
- 
+
 If they mentioned friction or difficulty:
 "You touched on [X] earlier — is there anything else along those lines, or something completely different, that you'd want the ${companyName} team to know?"
- 
+
 If they were engaged or specific about something:
 "You seemed genuinely interested in [X] — is there more there, or something on the other side of that worth sharing?"
- 
+
 If answers were mostly neutral, nothing obvious to reflect:
 "Is there something that didn't come up that you'd want to make sure the ${companyName} team knows?"
- 
+
 The seed is a foothold, not a destination. Follow wherever they go.
- 
+
 OPEN
 Follow threads the user introduces. Not threads you generate. If you find yourself following your own inference rather than something they said — stop. Ask something more open, or move toward exit.
- 
+
 EXIT
 Read the signals:
 - Expansive, detailed, introducing new threads → give more room. This is your best data.
 - Short answers, clean endings → don't push. Move toward exit.
- 
+
 Close with something specific to what they said. Then:
 "Is there anything else you'd want the ${companyName} team to know?"
- 
+
 One beat. Then a warm, specific goodbye — not generic.
 
 ---
- 
+
 EXAMPLES
- 
+
 User: "It was confusing."
 → Follow up. "What was confusing about it?"
- 
+
 User: "Yeah it mostly just worked, I didn't really think about it."
 → Move on. Short, closed, complete.
- 
+
 User: "There was this one thing — actually I don't know if it matters—"
 → Wait. They're mid-thought. Don't fill the silence.
- 
+
 User: "It was fine I guess."
 → Move on. Neutral, no charge.
- 
+
 User: "Honestly it was kind of a mess at first but then I figured it out."
 → Follow the thread. "What made it feel like a mess early on?"
- 
+
 User: "I don't know, it's hard to say."
 → Once: "What's your gut feeling?" If nothing, move on.
- 
+
 ---
 
 DIRECTED QUESTIONS
@@ -219,10 +230,9 @@ export async function POST(request: Request) {
       });
     }
 
-    const apiKey = process.env.VAPI_PUBLIC_KEY;
-    if (!apiKey) {
-      throw new Error("VAPI_PUBLIC_KEY is not set");
-    }
+    const livekitUrl = required("LIVEKIT_URL");
+    const livekitApiKey = required("LIVEKIT_API_KEY");
+    const livekitApiSecret = required("LIVEKIT_API_SECRET");
 
     const systemPrompt = buildSystemPrompt(
       linkToken.template.context,
@@ -233,93 +243,53 @@ export async function POST(request: Request) {
       linkToken.respondentContext,
     );
 
-    const vapiResponse = await fetch("https://api.vapi.ai/call/web", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        assistant: {
-          // Opening: omit `firstMessage` and use model-generated first turn so the assistant
-          // follows `model.messages` (system prompt OPENING) instead of a hardcoded string.
-          // See Vapi Assistant.firstMessage / firstMessageMode in the public API types.
-          firstMessageMode:
-            "assistant-speaks-first-with-model-generated-message",
-          endCallPhrases: ["goodbye", "have a great day", "take care", "bye"],
-          // TODO: Add voice configuration (Cartesia) to the Vapi call payload.
-          endCallMessage:
-            "Thanks so much for sharing — this is really helpful. Have a great day!",
-          transcriber: {
-            provider: "deepgram",
-            model: "nova-2",
-            language: "en",
-            // Silence (ms) before Deepgram finalizes an utterance. Default 10; higher = more
-            // tolerant of mid-thought pauses before the pipeline treats the user as "done".
-            endpointing: 400,
-            // TODO: If Vapi adds a supported Deepgram filler-word filtering field, configure it here.
-          },
-          // When the user is considered "done" and how long to wait before the assistant
-          // speaks — primary levers for not jumping in during natural pauses (English).
-          startSpeakingPlan: {
-            waitSeconds: 0.65,
-            smartEndpointingPlan: {
-              provider: "livekit",
-              // Balanced curve from Vapi voice-pipeline docs; waits longer when the model is
-              // less sure the user has finished (x = still-speaking probability).
-              waitFunction:
-                "(20 + 500 * sqrt(x) + 2500 * x^3 + 700 + 4000 * max(0, x-0.5)) / 2",
-            },
-          },
-          model: {
-            provider: "openai",
-            model: "gpt-4o",
-            messages: [
-              {
-                role: "system",
-                content: systemPrompt,
-              },
-            ],
-          },
-        },
-      }),
-    });
+    const roomName = `interview-${randomUUID()}`;
 
-    if (!vapiResponse.ok) {
-      const errorText = await vapiResponse.text();
-      throw new Error(`Vapi call create failed: ${vapiResponse.status} ${errorText}`);
-    }
-
-    const vapiCall = (await vapiResponse.json()) as {
-      id?: string;
-      monitor?: {
-        listenUrl?: string;
-        controlUrl?: string;
-      };
-      [key: string]: unknown;
-    };
-
-    if (!vapiCall.id) {
-      throw new Error("Vapi response missing call id");
-    }
-
-    await db.session.create({
+    // TODO: vapiCallId column now stores the LiveKit room name. Rename via
+    // migration to externalCallId (or callRoom) when convenient.
+    const session = await db.session.create({
       data: {
         linkTokenId: linkToken.id,
         respondentRef: linkToken.respondentRef,
-        vapiCallId: vapiCall.id,
+        vapiCallId: roomName,
         status: SessionStatus.abandoned,
         startedAt: new Date(),
       },
     });
 
+    const at = new AccessToken(livekitApiKey, livekitApiSecret, {
+      identity: `respondent-${linkToken.id}`,
+      ttl: 60 * 30,
+    });
+    at.addGrant({
+      roomJoin: true,
+      room: roomName,
+      canPublish: true,
+      canSubscribe: true,
+    });
+    const participantToken = await at.toJwt();
+
+    const dispatchClient = new AgentDispatchClient(
+      livekitUrl,
+      livekitApiKey,
+      livekitApiSecret,
+    );
+    await dispatchClient.createDispatch(roomName, AGENT_NAME, {
+      metadata: JSON.stringify({
+        sessionId: session.id,
+        systemPrompt,
+        endCallPhrases: ["goodbye", "have a great day", "take care", "bye"],
+        voice: "alloy",
+      }),
+    });
+
     return NextResponse.json<StartCallResponse>({
-      callId: vapiCall.id,
-      monitor: vapiCall.monitor ?? null,
-      vapiCall,
+      roomName,
+      wsUrl: livekitUrl,
+      token: participantToken,
     });
   } catch (error) {
-    console.error("[calls/start POST] failed to start web call", error);
+    console.error("[calls/start POST] failed to start call", error);
     return NextResponse.json({ error: "Failed to start call" }, { status: 500 });
   }
 }

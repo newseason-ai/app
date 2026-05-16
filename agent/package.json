@@ -1,0 +1,26 @@
+{
+  "name": "newseason-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "LiveKit Cloud agent worker — bridges room audio to OpenAI Realtime",
+  "scripts": {
+    "dev": "tsx src/index.ts dev",
+    "start": "node --import tsx/esm src/index.ts start",
+    "build": "tsc",
+    "download-files": "tsx src/index.ts download-files",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@livekit/agents": "^1.4.2",
+    "@livekit/agents-plugin-openai": "^1.4.2",
+    "@livekit/agents-plugin-silero": "^1.4.2",
+    "@livekit/rtc-node": "^0.13.28",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0"
+  }
+}

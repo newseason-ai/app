@@ -1,8 +1,16 @@
 "use client";
 
-import Vapi from "@vapi-ai/web";
+import {
+  type Participant,
+  Room,
+  RoomEvent,
+  Track,
+  type TranscriptionSegment,
+} from "livekit-client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import "../respondent.css";
+
+import type { StartCallResponse } from "@/types/api";
 
 type CallScreenProps = {
   company: { name: string; slug: string; logoUrl: string | null };
@@ -25,11 +33,8 @@ export function CallScreen({ company, token, onEnd }: CallScreenProps) {
   const [speakingState, setSpeakingState] = useState<SpeakingState>("idle");
   const [agentText, setAgentText] = useState("");
   const [userText, setUserText] = useState("");
-  const agentHistoryRef = useRef<string[]>([]);
-  const isNewAgentTurn = useRef(false);
-  const vapiRef = useRef<Vapi | null>(null);
+  const roomRef = useRef<Room | null>(null);
   const endedRef = useRef(false);
-  const currentSpeakerRef = useRef<"assistant" | "user" | "unknown">("unknown");
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -45,9 +50,6 @@ export function CallScreen({ company, token, onEnd }: CallScreenProps) {
     let mounted = true;
 
     const initCall = async () => {
-      // TODO: Add a loading/connecting state while /api/calls/start is in flight.
-      // Show a "Connecting..." indicator with the orb in a slow idle pulse
-      // before the call connects, so the screen doesn't feel frozen on mount.
       try {
         const response = await fetch("/api/calls/start", {
           method: "POST",
@@ -59,133 +61,67 @@ export function CallScreen({ company, token, onEnd }: CallScreenProps) {
           throw new Error(`Failed to start call: ${response.status} ${text}`);
         }
 
-        const payload = (await response.json()) as {
-          vapiCall?: {
-            id?: string;
-            webCallUrl?: string;
-            transport?: { callUrl?: string };
-          };
-        };
-        console.log("[/api/calls/start payload]", payload);
-
-        const publicKey = process.env.NEXT_PUBLIC_VAPI_KEY;
-        if (!publicKey) {
-          throw new Error("NEXT_PUBLIC_VAPI_KEY is not set");
-        }
-
-        const webCallUrl =
-          payload.vapiCall?.webCallUrl ?? payload.vapiCall?.transport?.callUrl;
-        if (!webCallUrl) {
-          throw new Error("Missing webCallUrl in /api/calls/start response");
-        }
-        console.log("[vapi reconnect args]", {
-          webCallUrl,
-          id: payload.vapiCall?.id,
-        });
+        const payload = (await response.json()) as StartCallResponse;
 
         if (!mounted) return;
-        setConnecting(false);
 
-        const vapi = new Vapi(publicKey);
-        vapiRef.current = vapi;
+        const room = new Room({
+          adaptiveStream: true,
+          dynacast: true,
+        });
+        roomRef.current = room;
 
-        (vapi as any).on("speech-start", (event: any) => {
-          const eventRole =
-            typeof event?.role === "string" &&
-            (event.role === "assistant" || event.role === "user")
-              ? event.role
-              : null;
-          if (eventRole) {
-            currentSpeakerRef.current = eventRole;
+        room.on(RoomEvent.TrackSubscribed, (track) => {
+          if (track.kind === Track.Kind.Audio) {
+            track.attach();
           }
-          console.log("[vapi event] speech-start", {
-            event,
-            resolvedRole: currentSpeakerRef.current,
-          });
-          if (currentSpeakerRef.current === "assistant") {
-            isNewAgentTurn.current = true;
-            setUserText("");
-          }
-          setSpeakingState(
-            currentSpeakerRef.current === "assistant" ? "agent" : "user",
-          );
         });
 
-        (vapi as any).on("speech-end", (event: any) => {
-          console.log("[vapi event] speech-end", {
-            event,
-            currentSpeaker: currentSpeakerRef.current,
-          });
-          setSpeakingState("idle");
-        });
-
-        vapi.on("message", (msg: any) => {
-          console.log("[vapi event] message", msg);
-          if (msg?.type === "speech-update" && typeof msg?.role === "string") {
-            // TODO: There is still a potential race between speech-update and speech-start role timing.
-            // Revisit once Vapi event ordering/payload guarantees are confirmed.
-            currentSpeakerRef.current =
-              msg.role === "assistant" || msg.role === "user" ? msg.role : "unknown";
+        room.on(RoomEvent.ActiveSpeakersChanged, (speakers: Participant[]) => {
+          if (speakers.length === 0) {
+            setSpeakingState("idle");
             return;
           }
+          const localSpeaking = speakers.some((p) => p.isLocal);
+          setSpeakingState(localSpeaking ? "user" : "agent");
+        });
 
-          if (msg?.type !== "transcript") return;
-
-          const role = typeof msg?.role === "string" ? msg.role : "";
-          const transcript =
-            typeof msg?.transcript === "string"
-              ? msg.transcript
-              : typeof msg?.content === "string"
-                ? msg.content
-                : "";
-          if (!transcript) return;
-
-          if (role === "assistant") {
-            if (isNewAgentTurn.current) {
-              // First transcript of a new turn — clear and start fresh
-              isNewAgentTurn.current = false;
-              setAgentText(transcript);
+        room.on(
+          RoomEvent.TranscriptionReceived,
+          (segments: TranscriptionSegment[], participant?: Participant) => {
+            if (segments.length === 0) return;
+            const text = segments
+              .map((s) => s.text)
+              .filter(Boolean)
+              .join(" ")
+              .trim();
+            if (!text) return;
+            if (participant?.isLocal) {
+              setUserText(text);
             } else {
-              // Subsequent partials — replace with latest (Vapi partials are cumulative)
-              setAgentText(transcript);
+              setAgentText(text);
+              setUserText("");
             }
-            if (msg?.transcriptType === "final") {
-              agentHistoryRef.current.push(transcript);
-            }
-            return;
-          }
+          },
+        );
 
-          if (role === "user") {
-            setUserText(transcript);
-          }
-        });
-
-        vapi.on("call-end", () => {
-          console.log("[vapi event] call-end");
+        room.on(RoomEvent.Disconnected, () => {
           if (endedRef.current) return;
           endedRef.current = true;
           setSpeakingState("idle");
           onEnd();
         });
 
-        vapi.on("error", (error: any) => {
-          console.log("[vapi event] error", error);
-          console.error("[vapi web sdk] error", error);
-        });
+        await room.connect(payload.wsUrl, payload.token);
+        await room.localParticipant.setMicrophoneEnabled(true);
 
-        // Best effort wildcard listener for SDKs that support it.
-        (vapi as any).on?.("*", (event: any) => {
-          console.log("[vapi *]", event);
-        });
-
-        await vapi.reconnect({
-          webCallUrl,
-          id: payload.vapiCall?.id,
-        });
-      } catch (error) {
-        console.error("[call screen] failed to initialize Vapi", error);
-        // TODO: distinguish between error types — Vapi downtime vs network vs token expired.
-        // Consider retry logic for transient failures before showing the error screen.
+        if (!mounted) {
+          await room.disconnect();
+          return;
+        }
+        setConnecting(false);
+      } catch (err) {
+        console.error("[call screen] failed to initialize LiveKit", err);
         if (mounted) {
           setConnecting(false);
           setError("Something went wrong starting the call. Please try again.");
@@ -197,11 +133,10 @@ export function CallScreen({ company, token, onEnd }: CallScreenProps) {
 
     return () => {
       mounted = false;
-      const vapi = vapiRef.current;
-      vapiRef.current = null;
-      if (vapi) {
-        void vapi.stop();
-        vapi.removeAllListeners();
+      const room = roomRef.current;
+      roomRef.current = null;
+      if (room) {
+        void room.disconnect();
       }
     };
   }, [onEnd, token]);
@@ -210,9 +145,9 @@ export function CallScreen({ company, token, onEnd }: CallScreenProps) {
     if (endedRef.current) return;
     endedRef.current = true;
     setSpeakingState("idle");
-    const vapi = vapiRef.current;
-    if (vapi) {
-      void vapi.stop();
+    const room = roomRef.current;
+    if (room) {
+      void room.disconnect();
     }
     onEnd();
   };
@@ -361,7 +296,6 @@ export function CallScreen({ company, token, onEnd }: CallScreenProps) {
                 style={{
                   height,
                   opacity: speakingState === "user" ? 1 : 0.35,
-                  // TODO: Waveform animation can still be finicky across browsers; revisit if it stops animating.
                   animation:
                     speakingState === "user"
                       ? `callWave 1.1s ease-in-out ${idx * 0.08}s infinite`
