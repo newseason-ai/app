@@ -5,6 +5,7 @@ import {
   WorkerOptions,
   cli,
   defineAgent,
+  llm,
   voice,
 } from "@livekit/agents";
 import * as openai from "@livekit/agents-plugin-openai";
@@ -26,8 +27,7 @@ export default defineAgent({
     await ctx.connect();
 
     const metadata = parseMetadata(ctx.job.metadata);
-    const { sessionId, systemPrompt, endCallPhrases, voice: voiceName } =
-      metadata;
+    const { sessionId, systemPrompt, voice: voiceName } = metadata;
 
     console.info("[agent] starting", {
       sessionId,
@@ -54,14 +54,36 @@ export default defineAgent({
       },
     });
 
+    const sessionRef: { current: voice.AgentSession | null } = {
+      current: null,
+    };
+
+    const endCall = llm.tool({
+      description:
+        "End the call. Call this once you have said your final goodbye and the conversation is naturally complete. Do not say anything else after calling it.",
+      execute: async () => {
+        console.info("[agent] end_call tool invoked");
+        setTimeout(() => {
+          void sessionRef.current?.close();
+        }, 1500);
+        return "Call ending.";
+      },
+    });
+
     const agent = new voice.Agent({
       instructions: systemPrompt,
       llm: model,
+      tools: { end_call: endCall },
     });
 
     const session = new voice.AgentSession({ llm: model });
+    sessionRef.current = session;
 
     session.on(voice.AgentSessionEventTypes.UserInputTranscribed, (event) => {
+      console.info("[agent] user_input_transcribed", {
+        isFinal: event.isFinal,
+        len: event.transcript.length,
+      });
       if (!event.isFinal) return;
       void sink.post({
         sessionId,
@@ -72,29 +94,33 @@ export default defineAgent({
 
     session.on(voice.AgentSessionEventTypes.ConversationItemAdded, (event) => {
       const item = event.item;
+      console.info("[agent] conversation_item_added", {
+        type: item.type,
+        role: item.type === "message" ? item.role : "n/a",
+        hasText:
+          item.type === "message" ? Boolean(item.textContent) : false,
+      });
       if (item.type !== "message" || item.role !== "assistant") return;
       const text = item.textContent;
       if (!text) return;
       void sink.post({ sessionId, speaker: "assistant", content: text });
-      if (containsEndPhrase(text, endCallPhrases)) {
-        void endCall(session);
-      }
+    });
+
+    session.on(voice.AgentSessionEventTypes.AgentStateChanged, (event) => {
+      console.info("[agent] agent_state_changed", {
+        from: event.oldState,
+        to: event.newState,
+      });
+    });
+
+    session.on(voice.AgentSessionEventTypes.Error, (event) => {
+      console.error("[agent] error", event);
     });
 
     await session.start({ agent, room: ctx.room });
     await session.generateReply();
   },
 });
-
-function containsEndPhrase(text: string, phrases: string[]): boolean {
-  const haystack = text.toLowerCase();
-  return phrases.some((p) => haystack.includes(p.toLowerCase()));
-}
-
-async function endCall(session: voice.AgentSession): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, 2000));
-  await session.close();
-}
 
 cli.runApp(
   new WorkerOptions({

@@ -40,6 +40,7 @@ export async function POST(request: Request) {
   const a = Buffer.from(provided, "hex");
   const b = Buffer.from(expected, "hex");
   if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    console.warn("[transcript] invalid signature");
     return NextResponse.json({ error: "invalid signature" }, { status: 401 });
   }
 
@@ -50,8 +51,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid json" }, { status: 400 });
   }
   if (!isValidPayload(payload)) {
+    console.warn("[transcript] invalid payload", payload);
     return NextResponse.json({ error: "invalid payload" }, { status: 400 });
   }
+
+  console.info("[transcript] turn received", {
+    sessionId: payload.sessionId,
+    speaker: payload.speaker,
+    turnIndex: payload.turnIndex,
+    contentLen: payload.content.length,
+  });
 
   await db.transcriptTurn.create({
     data: {

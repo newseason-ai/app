@@ -148,10 +148,11 @@ Read the signals:
 - Expansive, detailed, introducing new threads → give more room. This is your best data.
 - Short answers, clean endings → don't push. Move toward exit.
 
-Close with something specific to what they said. Then:
-"Is there anything else you'd want the ${companyName} team to know?"
+Close with something specific to what they said, then ask one final wide-open question giving the user a last chance to add anything.
 
 One beat. Then a warm, specific goodbye — not generic.
+
+After your goodbye, call the end_call tool to end the call. Do not say anything else after calling it.
 
 ---
 
@@ -252,7 +253,6 @@ export async function POST(request: Request) {
       metadata: JSON.stringify({
         sessionId: session.id,
         systemPrompt,
-        endCallPhrases: ["goodbye", "have a great day", "take care", "bye"],
         voice: "alloy",
       }),
     });
