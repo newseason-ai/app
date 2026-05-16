@@ -45,6 +45,13 @@ export default defineAgent({
       model: "gpt-4o-realtime-preview",
       voice: voiceName,
       modalities: ["audio", "text"],
+      speed: 1.1,
+      turnDetection: {
+        type: "server_vad",
+        threshold: 0.5,
+        prefix_padding_ms: 300,
+        silence_duration_ms: 400,
+      },
     });
 
     const agent = new voice.Agent({
@@ -93,5 +100,6 @@ cli.runApp(
   new WorkerOptions({
     agent: import.meta.filename,
     agentName: "interviewer",
+    numIdleProcesses: 1,
   }),
 );
