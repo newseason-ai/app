@@ -1,36 +1,122 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# New Season AI
 
-## Getting Started
+Voice customer research for startups. Operators create short interview templates, send unique links to respondents, and review transcripts, findings, and synthesized insights in a dashboard. Respondents talk for ~90 seconds in the browser — no app install, no scheduling.
 
-First, run the development server:
+## Architecture
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```
+Operator (dashboard)          Respondent (/r/[token])
+        │                              │
+        ▼                              ▼
+   Next.js app  ◄──── transcripts ──── LiveKit agent worker
+        │         (signed POST)              │
+        │                                    ▼
+        ├──── Postgres (Prisma)         OpenAI Realtime
+        ├──── Supabase Auth
+        └──── LiveKit (rooms + webhooks)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+1. **Next.js app** — marketing site, operator dashboard, respondent flow, and API routes.
+2. **LiveKit agent** (`agent/`) — joins interview rooms, runs the OpenAI Realtime voice model, and streams transcript turns back to the app.
+3. **Post-call processing** — when LiveKit fires a `room_finished` webhook, the app marks the session complete and generates per-session findings and template-level insights via OpenAI.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Repo layout
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Path | Purpose |
+|------|---------|
+| `app/` | Next.js App Router pages and API routes |
+| `lib/` | Database, Supabase, queries, findings/insights generation |
+| `prisma/` | Postgres schema |
+| `agent/` | LiveKit Cloud agent worker (separate Node package) |
+| `proxy.ts` | Auth gate — protects `/dashboard` and `/onboarding` via Supabase |
 
-## Learn More
+## Prerequisites
 
-To learn more about Next.js, take a look at the following resources:
+- Node.js 20+
+- Postgres database
+- [Supabase](https://supabase.com) project (auth)
+- [LiveKit Cloud](https://livekit.io) project with an agent named `interviewer`
+- OpenAI API key with Realtime access
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Environment variables
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Copy the example files and fill in your credentials:
 
-## Deploy on Vercel
+```bash
+cp .env.example .env
+cp agent/.env.example agent/.env
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+| File | Purpose |
+|------|---------|
+| `.env.example` → `.env` | Next.js app (database, auth, LiveKit, OpenAI) |
+| `agent/.env.example` → `agent/.env` | LiveKit voice worker |
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+`TRANSCRIPT_CALLBACK_SECRET` must be identical in both files. In production, set `TRANSCRIPT_CALLBACK_URL` to your deployed app origin and configure a LiveKit webhook for `room_finished` → `https://your-app/api/webhooks/livekit`.
+
+## Local development
+
+Install dependencies for both packages:
+
+```bash
+npm install
+cd agent && npm install && cd ..
+```
+
+Sync the database schema:
+
+```bash
+npx prisma db push
+```
+
+Run the app and agent in separate terminals:
+
+```bash
+# Terminal 1 — Next.js
+npm run dev
+
+# Terminal 2 — LiveKit agent worker
+cd agent && npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000). Sign in at `/login`, complete onboarding, then create an interview and send a link from the dashboard. The respondent opens `/r/[token]` to start a voice session.
+
+## Scripts
+
+**Root (Next.js)**
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start dev server |
+| `npm run build` | `prisma generate` + production build |
+| `npm run start` | Start production server |
+| `npm run lint` | Run ESLint |
+
+**Agent**
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start agent worker in dev mode |
+| `npm run start` | Start agent worker in production |
+| `npm run typecheck` | TypeScript check |
+
+## Key routes
+
+| Route | Who | Description |
+|-------|-----|-------------|
+| `/` | Public | Marketing landing page |
+| `/login` | Public | Supabase magic-link sign-in |
+| `/onboarding` | Operator | First-time company + interview setup |
+| `/dashboard` | Operator | Sessions, interviews, insights |
+| `/r/[token]` | Respondent | Branded voice interview flow |
+| `/api/calls/start` | Respondent | Creates LiveKit room and dispatches agent |
+| `/api/calls/transcript` | Agent | Receives signed transcript turns |
+| `/api/webhooks/livekit` | LiveKit | Handles `room_finished`, triggers findings |
+
+## Stack
+
+- **Next.js 16** + React 19 + Tailwind CSS 4
+- **Prisma 7** + Postgres
+- **Supabase** (SSR auth)
+- **LiveKit** (WebRTC rooms, agent dispatch, webhooks)
+- **OpenAI Realtime** (voice interviews) and chat completions (findings/insights)
